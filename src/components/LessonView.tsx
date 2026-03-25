@@ -145,13 +145,6 @@ export default function LessonView({ day, portion, onComplete, curatedData, isAd
         return;
       }
 
-      // For regular users, if no curated data exists, don't fetch from Sefaria
-      if (!isAdmin) {
-        setLoading(false);
-        setData(null);
-        return;
-      }
-
       setLoading(true);
       try {
         const result = await fetchText(portion.ref);
