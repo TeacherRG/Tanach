@@ -1,0 +1,10 @@
+{
+  "name": "node-domexception",
+  "version": "1.0.0",
+  "description": "Stub that forwards to the platform's native DOMException (Node 18+).",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  }
+}
