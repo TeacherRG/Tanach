@@ -1,10 +1,9 @@
 {
-  "projectId": "gen-lang-client-0563099656",
-  "appId": "1:133580551458:web:b2cb4b50591946e7d7e17b",
-  "apiKey": "AIzaSyCYQ1VySaSi5CYXPgvnbygzi26lIv-9BB4",
-  "authDomain": "gen-lang-client-0563099656.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-e9799ff7-ab4c-4ad6-858e-374b6f2ee210",
-  "storageBucket": "gen-lang-client-0563099656.firebasestorage.app",
-  "messagingSenderId": "133580551458",
-  "measurementId": ""
+  "projectId": "tanach-3bc18",
+  "appId": "1:606960243365:web:3b2b47efe9902c19e3b34c",
+  "apiKey": "AIzaSyDidmsYShiUTBWb4uo-zA69VnB286DR6wY",
+  "authDomain": "tanach-3bc18.firebaseapp.com",
+  "storageBucket": "tanach-3bc18.firebasestorage.app",
+  "messagingSenderId": "606960243365",
+  "measurementId": "G-WN6DMHD7RE"
 }
