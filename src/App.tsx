@@ -62,9 +62,11 @@ export default function App() {
   const TOTAL_DAYS = TANAKH_SCHEDULE.length;
   const isAdmin = user?.email === "ryvgrin@gmail.com" || user?.email === "roman.grinberg.at@gmail.com" || userProfile?.role === "admin";
 
+  const isGuest = user?.isAnonymous === true;
+
   // Sync User Profile
   useEffect(() => {
-    if (!user?.uid) {
+    if (!user?.uid || isGuest) {
       setUserProfile(null);
       return;
     }
@@ -76,7 +78,7 @@ export default function App() {
       handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
     });
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [user?.uid, isGuest]);
 
   // Sync Curated Lessons
   useEffect(() => {
@@ -117,7 +119,7 @@ export default function App() {
 
   // Sync Reminder Settings
   useEffect(() => {
-    if (!user || !isAuthReady) return;
+    if (!user || !isAuthReady || isGuest) return;
 
     const unsubscribe = onSnapshot(doc(db, "reminders", user.uid), (doc) => {
       if (doc.exists()) {
@@ -132,7 +134,7 @@ export default function App() {
 
   // Sync Earned Badges
   useEffect(() => {
-    if (!user || !isAuthReady) return;
+    if (!user || !isAuthReady || isGuest) return;
 
     const unsubscribe = onSnapshot(collection(db, "badges"), (snapshot) => {
       const badges = snapshot.docs
@@ -151,7 +153,7 @@ export default function App() {
 
   // Check for new badges when completedPortions changes
   useEffect(() => {
-    if (!user || !isAuthReady || completedPortions.length === 0) return;
+    if (!user || !isAuthReady || completedPortions.length === 0 || isGuest) return;
 
     const checkNewBadges = async () => {
       // Group portions by book
@@ -214,7 +216,10 @@ export default function App() {
 
   // Sync Progress from Firestore
   useEffect(() => {
-    if (!user || !isAuthReady) return;
+    if (!user || !isAuthReady || isGuest) {
+      if (isGuest) setLoading(false);
+      return;
+    }
 
     const q = query(collection(db, "progress"), where("userId", "==", user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -275,7 +280,7 @@ export default function App() {
 
   // Sync User Profile and Goal to Firestore
   useEffect(() => {
-    if (!user) return;
+    if (!user || isGuest) return;
 
     const syncUser = async () => {
       const userRef = doc(db, "users", user.uid);
@@ -322,7 +327,7 @@ export default function App() {
   };
 
   const handleCompleteQuiz = async (score: number) => {
-    if (viewingPortion && user) {
+    if (viewingPortion && user && !isGuest) {
       const portionId = `${viewingPortion.day}_${viewingPortion.portion.track}`;
       const progressId = `${user.uid}_${portionId}`;
       try {
