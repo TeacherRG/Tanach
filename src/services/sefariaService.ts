@@ -2,6 +2,12 @@ import axios from "axios";
 
 const SEFARIA_API_BASE = "https://www.sefaria.org/api/v2/texts";
 
+const flatten = (text: unknown): string[] => {
+  if (typeof text === "string") return [text];
+  if (Array.isArray(text)) return text.flatMap(item => flatten(item));
+  return [];
+};
+
 export interface SefariaResponse {
   he: string[];
   text: string[];
@@ -61,14 +67,6 @@ export async function fetchText(ref: string): Promise<SefariaResponse> {
 
       if (data.error) continue;
 
-      const flatten = (text: any): string[] => {
-        if (typeof text === "string") return [text];
-        if (Array.isArray(text)) {
-          return text.flatMap(item => flatten(item));
-        }
-        return [];
-      };
-
       return {
         he: flatten(data.he),
         text: flatten(data.en || data.text),
@@ -91,14 +89,6 @@ export async function fetchText(ref: string): Promise<SefariaResponse> {
     const v1Data = v1Response.data;
     
     if (v1Data.error) throw new Error(v1Data.error);
-
-    const flatten = (text: any): string[] => {
-      if (typeof text === "string") return [text];
-      if (Array.isArray(text)) {
-        return text.flatMap(item => flatten(item));
-      }
-      return [];
-    };
 
     return {
       ...v1Data,

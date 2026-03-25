@@ -185,7 +185,6 @@ export default function AdminView() {
     setLoading(true);
     setStatus(null);
     try {
-      const docRef = doc(db, "curated_lessons", selectedDay.toString());
       const snapshot = await getDocs(query(collection(db, "curated_lessons"), where("day", "==", selectedDay)));
       
       if (!snapshot.empty) {
