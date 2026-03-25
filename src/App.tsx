@@ -136,9 +136,8 @@ export default function App() {
   useEffect(() => {
     if (!user || !isAuthReady || isGuest) return;
 
-    const unsubscribe = onSnapshot(collection(db, "badges"), (snapshot) => {
+    const unsubscribe = onSnapshot(query(collection(db, "badges"), where("userId", "==", user.uid)), (snapshot) => {
       const badges = snapshot.docs
-        .filter(doc => doc.data().userId === user.uid)
         .map(doc => ({
           en: doc.data().bookName,
           ru: doc.data().ruBookName || doc.data().bookName
@@ -326,7 +325,7 @@ export default function App() {
     setIsTakingQuiz(true);
   };
 
-  const handleCompleteQuiz = async (score: number) => {
+  const handleCompleteQuiz = async (score: number, totalQuestions: number) => {
     if (viewingPortion && user && !isGuest) {
       const portionId = `${viewingPortion.day}_${viewingPortion.portion.track}`;
       const progressId = `${user.uid}_${portionId}`;
@@ -343,7 +342,7 @@ export default function App() {
         handleFirestoreError(error, OperationType.WRITE, `progress/${progressId}`);
       }
     }
-    if (score / (viewingPortion?.portion.verseCount || 1) >= 0.7) {
+    if (totalQuestions > 0 && score / totalQuestions >= 0.7) {
       toast.success(language === "ru" ? "Отличный результат! Чтение завершено." : "Excellent score! Reading completed.", {
         description: language === "ru" ? "Ваш прогресс сохранен." : "Your progress has been saved.",
         duration: 5000,
@@ -391,7 +390,7 @@ export default function App() {
             className="py-10"
           >
             <Certificate 
-              userName={user.displayName || "Roman Grinberg"} 
+              userName={user.displayName || user.email || ""}
               completionDate={new Date().toLocaleDateString()} 
             />
             <div className="mt-10 flex justify-center">

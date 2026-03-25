@@ -12,7 +12,7 @@ import confetti from "canvas-confetti";
 interface QuizProps {
   day: number;
   portion: Portion;
-  onComplete: (score: number) => void;
+  onComplete: (score: number, totalQuestions: number) => void;
   curatedQuestions?: Question[];
   isAdmin?: boolean;
 }
@@ -148,8 +148,8 @@ export default function Quiz({ day, portion, onComplete, curatedQuestions, isAdm
               : "The administrator hasn't prepared a quiz for this reading yet. Please check back later!"}
           </p>
         </div>
-        <button 
-          onClick={() => onComplete(0)}
+        <button
+          onClick={() => onComplete(0, 0)}
           className="px-8 py-3 bg-[#141414] text-white rounded-full font-bold hover:bg-opacity-90 transition-all"
         >
           {t("returnToDashboard")}
@@ -231,8 +231,8 @@ export default function Quiz({ day, portion, onComplete, curatedQuestions, isAdm
           </div>
         </div>
 
-        <button 
-          onClick={() => onComplete(score)}
+        <button
+          onClick={() => onComplete(score, questions.length)}
           className="w-full py-5 bg-[#141414] text-white rounded-2xl font-bold text-lg hover:scale-[1.02] transition-all shadow-xl"
         >
           {t("returnToDashboard")}
