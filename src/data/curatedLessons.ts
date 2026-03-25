@@ -3,8 +3,8 @@ export interface CuratedPortion {
   ruBook: string;
   ref: string;
   ruRef: string;
-  heText: string[];
-  ruTranslation: string[];
+  heText?: string[];
+  ruTranslation?: string[];
   quiz: Array<{
     id: string;
     text: string;

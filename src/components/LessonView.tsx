@@ -5,7 +5,7 @@ import { Loader2, MessageSquare, ChevronDown, ChevronUp, Pause, Volume2, BookOpe
 import { motion, AnimatePresence } from "motion/react";
 import { useLanguage } from "../data/LanguageContext";
 import SharedCommentary from "./SharedCommentary";
-import { getStaticTranslation } from "../services/translationService";
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { db, collection, addDoc, auth, handleFirestoreError, OperationType } from "../firebase";
 import { toast } from "sonner";
@@ -130,24 +130,13 @@ export default function LessonView({ day, portion, onComplete, curatedData, isAd
   useEffect(() => {
     async function load() {
       setCurrentVerseIndex(0);
-      if (curatedData) {
-        setData({
-          he: curatedData.heText,
-          text: curatedData.ruTranslation,
-          ref: curatedData.ref,
-          book: curatedData.book,
-          heBook: curatedData.book,
-          sections: [],
-          toSections: [],
-          commentary: []
-        });
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
       try {
         const result = await fetchText(portion.ref);
+        // If admin has provided Russian translations (via database), use them
+        if (curatedData?.ruTranslation?.length > 0) {
+          result.text = curatedData.ruTranslation;
+        }
         setData(result);
       } catch (err) {
         setError("Failed to load text from Sefaria. Please try again.");
@@ -377,8 +366,6 @@ export default function LessonView({ day, portion, onComplete, curatedData, isAd
               const heVerse = data.he[idx];
               const verseNum = startVerse + idx;
               
-              const russianTranslation = language === "ru" ? getStaticTranslation(portion.book, chapter, verseNum) : null;
-              
               const verseCommentary = data.commentary?.filter(comm => {
                 if (!comm || !comm.ref) return false;
                 
@@ -431,16 +418,10 @@ export default function LessonView({ day, portion, onComplete, curatedData, isAd
                       {(textLanguage === "en" || textLanguage === "both") && (
                         <div className="text-xl leading-relaxed text-[#141414]/80 font-sans relative pr-12 border-t border-[#141414]/5 pt-6">
                           <span className="absolute -left-8 top-6 text-[10px] font-bold text-[#141414]/20">{verseNum}</span>
-                          {russianTranslation ? (
-                            <div className="text-blue-900/90 font-medium">
-                              <div dangerouslySetInnerHTML={{ __html: russianTranslation }} />
-                            </div>
-                          ) : (
-                            <div dangerouslySetInnerHTML={{ __html: String(data.text?.[idx] || "") }} />
-                          )}
-                          
+                          <div dangerouslySetInnerHTML={{ __html: String(data.text?.[idx] || "") }} />
+
                           <button
-                            onClick={() => saveToFavorites('verse', russianTranslation || String(data.text?.[idx] || ""), `${portion.book} ${chapter}:${verseNum}`, `v_${idx}`)}
+                            onClick={() => saveToFavorites('verse', String(data.text?.[idx] || ""), `${portion.book} ${chapter}:${verseNum}`, `v_${idx}`)}
                             disabled={savingFav === `v_${idx}`}
                             className="absolute right-0 top-6 p-2 text-[#141414]/20 hover:text-amber-400 transition-colors"
                             title={t("addToFavorites")}
@@ -501,13 +482,12 @@ export default function LessonView({ day, portion, onComplete, curatedData, isAd
             <div className="space-y-12">
               {data.he.map((heVerse, idx) => {
                 const verseNum = startVerse + idx;
-                const russianTranslation = language === "ru" ? getStaticTranslation(portion.book, chapter, verseNum) : null;
 
                 return (
                   <div key={idx} className="border-b border-[#141414]/5 pb-12 space-y-6">
                     <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-[#141414]/20">
                       <span>{t("verse")} {verseNum}</span>
-                      <button 
+                      <button
                         onClick={() => handlePlayTts(idx)}
                         className="p-2 hover:bg-[#141414]/5 rounded-full transition-all"
                       >
@@ -519,11 +499,7 @@ export default function LessonView({ day, portion, onComplete, curatedData, isAd
                         <div dangerouslySetInnerHTML={{ __html: String(heVerse) }} />
                       </div>
                       <div className="text-lg leading-relaxed text-[#141414]/80 font-sans">
-                        {russianTranslation ? (
-                          <div dangerouslySetInnerHTML={{ __html: russianTranslation }} />
-                        ) : (
-                          <div dangerouslySetInnerHTML={{ __html: String(data.text?.[idx] || "") }} />
-                        )}
+                        <div dangerouslySetInnerHTML={{ __html: String(data.text?.[idx] || "") }} />
                       </div>
                     </div>
                   </div>
