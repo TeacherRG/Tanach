@@ -1,0 +1,236 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public and private information for a user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier from Firebase Auth" },
+        "displayName": { "type": "string", "description": "User's full name" },
+        "email": { "type": "string", "format": "email", "description": "User's email address" },
+        "photoURL": { "type": "string", "format": "uri", "description": "User's profile picture URL" },
+        "gender": { "type": "string", "enum": ["male", "female"], "description": "User's gender" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User's role" },
+        "dailyGoal": { "type": "integer", "description": "User's daily study goal in verses" },
+        "joinedAt": { "type": "string", "format": "date-time", "description": "When the user joined the platform" }
+      },
+      "required": ["uid", "email", "joinedAt"]
+    },
+    "ChavrutaRequest": {
+      "title": "Chavruta Study Request",
+      "description": "A request to find a study partner for a specific time.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user making the request" },
+        "userName": { "type": "string", "description": "The name of the user" },
+        "gender": { "type": "string", "enum": ["male", "female"], "description": "Gender of the user" },
+        "preferredTime": { "type": "string", "description": "Preferred study time (e.g., HH:mm)" },
+        "days": { "type": "array", "items": { "type": "string" }, "description": "Preferred days of the week" },
+        "status": { "type": "string", "enum": ["open", "matched", "closed"], "description": "Status of the request" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the request was created" },
+        "expiresAt": { "type": "string", "format": "date-time", "description": "When the request will expire" }
+      },
+      "required": ["userId", "userName", "gender", "preferredTime", "status", "createdAt", "expiresAt"]
+    },
+    "Chat": {
+      "title": "Chavruta Chat",
+      "description": "A conversation between two potential study partners.",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" }, "description": "UIDs of the two participants" },
+        "participantNames": { "type": "object", "description": "Map of UID to display name" },
+        "lastMessage": { "type": "string", "description": "The text of the last message sent" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "When the last message was sent" },
+        "requestId": { "type": "string", "description": "The ID of the ChavrutaRequest this chat is about" }
+      },
+      "required": ["participants", "participantNames", "updatedAt", "requestId"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "A single message in a chat.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "description": "The UID of the sender" },
+        "text": { "type": "string", "description": "The message content" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent" }
+      },
+      "required": ["senderId", "text", "createdAt"]
+    },
+    "Progress": {
+      "title": "Daily Progress",
+      "description": "Records completion of a specific day's lesson and quiz.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user" },
+        "day": { "type": "integer", "description": "The day number (1-1200)" },
+        "completedAt": { "type": "string", "format": "date-time", "description": "When the lesson was completed" },
+        "quizScore": { "type": "integer", "description": "Score achieved on the quiz" }
+      },
+      "required": ["userId", "day", "completedAt"]
+    },
+    "Streak": {
+      "title": "User Streak",
+      "description": "Tracks the user's daily study streak.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user" },
+        "currentStreak": { "type": "integer", "description": "Current consecutive days of study" },
+        "longestStreak": { "type": "integer", "description": "Longest consecutive days of study" },
+        "lastCompletedAt": { "type": "string", "format": "date-time", "description": "The date of the last completed lesson" }
+      },
+      "required": ["userId", "currentStreak", "longestStreak"]
+    },
+    "Reminder": {
+      "title": "Daily Reminder Settings",
+      "description": "User preferences for daily study reminders.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user" },
+        "enabled": { "type": "boolean", "description": "Whether reminders are enabled" },
+        "preferredTime": { "type": "string", "description": "Time in HH:mm format" },
+        "timezone": { "type": "string", "description": "User's timezone" },
+        "type": { "type": "string", "enum": ["email", "browser", "both"], "description": "Type of reminder" },
+        "pushToken": { "type": "string", "description": "Firebase Cloud Messaging token for push notifications" },
+        "emailSubscribed": { "type": "boolean", "description": "Whether the user is subscribed to the email newsletter" }
+      },
+      "required": ["userId", "enabled", "preferredTime"]
+    },
+    "Translation": {
+      "title": "Shared Translation",
+      "description": "Shared translations of commentary text for all users.",
+      "type": "object",
+      "properties": {
+        "day": { "type": "integer", "description": "The day number" },
+        "index": { "type": "integer", "description": "The index of the commentary snippet" },
+        "originalText": { "type": "string", "description": "The original Hebrew text" },
+        "translatedText": { "type": "string", "description": "The translated text" },
+        "language": { "type": "string", "description": "Target language code (e.g., 'ru')" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the translation was created" }
+      },
+      "required": ["day", "index", "originalText", "translatedText", "language", "createdAt"]
+    },
+    "CuratedLesson": {
+      "title": "Curated Lesson",
+      "description": "A manually curated lesson for a specific day, including translations and quizzes.",
+      "type": "object",
+      "properties": {
+        "day": { "type": "integer", "description": "The day number" },
+        "portions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "book": { "type": "string" },
+              "ruBook": { "type": "string" },
+              "ref": { "type": "string" },
+              "ruRef": { "type": "string" },
+              "heText": { "type": "array", "items": { "type": "string" } },
+              "ruTranslation": { "type": "array", "items": { "type": "string" } },
+              "quiz": { "type": "array", "items": { "$ref": "Question" } }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["day", "portions", "createdAt"]
+    },
+    "Question": {
+      "title": "Quiz Question",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctAnswer": { "type": "integer" }
+      },
+      "required": ["id", "text", "options", "correctAnswer"]
+    },
+    "Favorite": {
+      "title": "Favorite Verse or Commentary",
+      "description": "A saved verse or commentary snippet for a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user" },
+        "type": { "type": "string", "enum": ["verse", "commentary"], "description": "Type of favorite" },
+        "content": { "type": "string", "description": "The text content" },
+        "ref": { "type": "string", "description": "Scripture reference or title" },
+        "day": { "type": "integer", "description": "The study day it belongs to" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When it was favorited" }
+      },
+      "required": ["userId", "type", "content", "ref", "day", "createdAt"]
+    },
+    "QuizAttempt": {
+      "title": "Quiz Attempt History",
+      "description": "Detailed record of a user's quiz attempt.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user" },
+        "day": { "type": "integer", "description": "The study day" },
+        "score": { "type": "integer", "description": "Number of correct answers" },
+        "totalQuestions": { "type": "integer", "description": "Total number of questions" },
+        "answers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "questionId": { "type": "string" },
+              "questionText": { "type": "string" },
+              "selectedAnswer": { "type": "integer" },
+              "correctAnswer": { "type": "integer" },
+              "isCorrect": { "type": "boolean" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the quiz was taken" }
+      },
+      "required": ["userId", "day", "score", "totalQuestions", "answers", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "/progress/{progressId}": {
+      "schema": "Progress",
+      "description": "Collection of progress records for all users."
+    },
+    "/streaks/{uid}": {
+      "schema": "Streak",
+      "description": "Streak tracking for each user."
+    },
+    "/reminders/{uid}": {
+      "schema": "Reminder",
+      "description": "User reminder preferences."
+    },
+    "/translations/{translationId}": {
+      "schema": "Translation",
+      "description": "Shared translations for commentary."
+    },
+    "/curated_lessons/{day}": {
+      "schema": "CuratedLesson",
+      "description": "Manually curated lessons for specific days."
+    },
+    "/chavruta_requests/{requestId}": {
+      "schema": "ChavrutaRequest",
+      "description": "Requests for finding a study partner."
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Chavruta chat sessions."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messages within a chavruta chat."
+    },
+    "/favorites/{favoriteId}": {
+      "schema": "Favorite",
+      "description": "User's favorite verses and commentaries."
+    },
+    "/quiz_attempts/{attemptId}": {
+      "schema": "QuizAttempt",
+      "description": "Detailed history of quiz attempts."
+    }
+  }
+}

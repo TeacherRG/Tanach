@@ -1,0 +1,300 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - displayName: string (optional) - User's name
+    //   - email: string (required, email format) - User's email
+    //   - photoURL: string (optional, URL format) - Profile picture
+    //   - joinedAt: timestamp (required) - When the user joined
+    //
+    // Collection: progress
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required) - UID of the user
+    //   - day: number (required, 1-365) - Day number
+    //   - completedAt: timestamp (required) - Completion date
+    //   - quizScore: number (optional, >= 0) - Score achieved
+    //
+    // Collection: streaks
+    // Document ID: {uid}
+    // Fields:
+    //   - userId: string (required) - UID of the user
+    //   - currentStreak: number (required, >= 0) - Current streak
+    //   - longestStreak: number (required, >= 0) - Longest streak
+    //   - lastCompletedAt: timestamp (optional) - Date of last completion
+    //
+    // Collection: badges
+    // Document ID: {uid}_{bookName}
+    // Fields:
+    //   - userId: string (required) - UID of the user
+    //   - bookName: string (required) - Name of the book completed
+    //   - earnedAt: timestamp (required) - Date earned
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+         (request.auth.token.email == "ryvgrin@gmail.com" && request.auth.token.email_verified == true) ||
+         (request.auth.token.email == "roman.grinberg.at@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data, uid) {
+      return hasRequiredFields(['uid', 'email', 'joinedAt']) &&
+             hasOnlyAllowedFields(['uid', 'displayName', 'email', 'photoURL', 'joinedAt', 'role', 'gender', 'dailyGoal']) &&
+             data.uid == uid &&
+             data.uid.size() < 128 &&
+             isValidEmail(data.email) &&
+             data.email.size() < 256 &&
+             (data.displayName == null || (data.displayName is string && data.displayName.size() < 128)) &&
+             (data.photoURL == null || (isValidUrl(data.photoURL) && data.photoURL.size() < 1024)) &&
+             (data.gender == null || data.gender in ['male', 'female']) &&
+             (data.dailyGoal == null || (data.dailyGoal is number && data.dailyGoal >= 0)) &&
+             data.joinedAt is timestamp &&
+             (data.role == null || data.role == 'user' || isAdmin());
+    }
+
+    function isValidProgress(data) {
+      return hasRequiredFields(['userId', 'day', 'completedAt']) &&
+             hasOnlyAllowedFields(['userId', 'day', 'completedAt', 'quizScore']) &&
+             data.userId == request.auth.uid &&
+             data.userId.size() < 128 &&
+             data.day is number && data.day >= 1 && data.day <= 1200 &&
+             data.completedAt is timestamp &&
+             (data.quizScore == null || (data.quizScore is number && data.quizScore >= 0));
+    }
+
+    function isValidStreak(data) {
+      return hasRequiredFields(['userId', 'currentStreak', 'longestStreak']) &&
+             hasOnlyAllowedFields(['userId', 'currentStreak', 'longestStreak', 'lastCompletedAt']) &&
+             data.userId == request.auth.uid &&
+             data.userId.size() < 128 &&
+             data.currentStreak is number && data.currentStreak >= 0 &&
+             data.longestStreak is number && data.longestStreak >= 0 &&
+             (data.lastCompletedAt == null || data.lastCompletedAt is timestamp);
+    }
+
+    function isValidReminder(data) {
+      return hasRequiredFields(['userId', 'enabled', 'preferredTime']) &&
+             hasOnlyAllowedFields(['userId', 'enabled', 'preferredTime', 'timezone', 'type', 'pushToken', 'emailSubscribed']) &&
+             data.userId == request.auth.uid &&
+             data.userId.size() < 128 &&
+             data.enabled is bool &&
+             data.preferredTime is string && data.preferredTime.matches("^\\d{2}:\\d{2}$") &&
+             (data.timezone == null || (data.timezone is string && data.timezone.size() < 64)) &&
+             (data.type == null || (data.type in ["email", "browser", "both"])) &&
+             (data.pushToken == null || (data.pushToken is string && data.pushToken.size() < 1024)) &&
+             (data.emailSubscribed == null || data.emailSubscribed is bool);
+    }
+
+    function isValidTranslation(data) {
+      return hasRequiredFields(['day', 'index', 'originalText', 'translatedText', 'language', 'createdAt']) &&
+             hasOnlyAllowedFields(['day', 'index', 'originalText', 'translatedText', 'language', 'createdAt']) &&
+             data.day is number && data.day >= 1 && data.day <= 1200 &&
+             data.index is string && data.index.size() < 64 &&
+             data.originalText is string && data.originalText.size() > 0 && data.originalText.size() < 10000 &&
+             data.translatedText is string && data.translatedText.size() > 0 && data.translatedText.size() < 10000 &&
+             data.language is string && data.language.size() < 10 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidCuratedLesson(data) {
+      return hasRequiredFields(['day', 'portions', 'createdAt']) &&
+             hasOnlyAllowedFields(['day', 'portions', 'createdAt', 'updatedAt']) &&
+             data.day is number && data.day >= 1 && data.day <= 1200 &&
+             data.portions is list && data.portions.size() > 0 && data.portions.size() <= 2 &&
+             data.createdAt is timestamp &&
+             (data.updatedAt == null || data.updatedAt is timestamp);
+    }
+
+    function isValidChavrutaRequest(data) {
+      return hasRequiredFields(['userId', 'userName', 'gender', 'preferredTime', 'status', 'createdAt', 'expiresAt']) &&
+             hasOnlyAllowedFields(['userId', 'userName', 'gender', 'preferredTime', 'days', 'status', 'createdAt', 'expiresAt']) &&
+             data.userId == request.auth.uid &&
+             data.gender in ['male', 'female'] &&
+             data.status in ['open', 'matched', 'closed'] &&
+             data.createdAt is timestamp &&
+             data.expiresAt is timestamp;
+    }
+
+    function isValidChat(data) {
+      return hasRequiredFields(['participants', 'participantNames', 'updatedAt', 'requestId']) &&
+             hasOnlyAllowedFields(['participants', 'participantNames', 'lastMessage', 'updatedAt', 'requestId']) &&
+             request.auth.uid in data.participants &&
+             data.participants.size() == 2 &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return hasRequiredFields(['senderId', 'text', 'createdAt']) &&
+             hasOnlyAllowedFields(['senderId', 'text', 'createdAt']) &&
+             data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidFavorite(data) {
+      return hasRequiredFields(['userId', 'type', 'content', 'ref', 'day', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'type', 'content', 'ref', 'day', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.type in ['verse', 'commentary'] &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 10000 &&
+             data.ref is string && data.ref.size() > 0 && data.ref.size() < 256 &&
+             data.day is number && data.day >= 1 && data.day <= 1200 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidQuizAttempt(data) {
+      return hasRequiredFields(['userId', 'day', 'score', 'totalQuestions', 'answers', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'day', 'score', 'totalQuestions', 'answers', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.userId.size() < 128 &&
+             data.day is number && data.day >= 1 && data.day <= 1200 &&
+             data.score is number && data.score >= 0 &&
+             data.totalQuestions is number && data.totalQuestions > 0 &&
+             data.answers is list &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidBadge(data) {
+      return hasRequiredFields(['userId', 'bookName', 'earnedAt']) &&
+             hasOnlyAllowedFields(['userId', 'bookName', 'earnedAt']) &&
+             data.userId == request.auth.uid &&
+             data.userId.size() < 128 &&
+             data.bookName is string && data.bookName.size() < 128 &&
+             data.earnedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isValidUser(request.resource.data, uid);
+      allow update: if (isOwner(uid) || isAdmin()) && isValidUser(request.resource.data, uid) && 
+                      request.resource.data.joinedAt == resource.data.joinedAt &&
+                      (isAdmin() || request.resource.data.role == resource.data.role || (!('role' in resource.data) && !('role' in request.resource.data)));
+    }
+
+    match /progress/{progressId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidProgress(request.resource.data);
+      allow update: if isAuthenticated() && isDocOwner() && isValidProgress(request.resource.data) &&
+                      request.resource.data.userId == resource.data.userId;
+      allow delete: if isAuthenticated() && (isDocOwner() || isAdmin());
+    }
+
+    match /streaks/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isValidStreak(request.resource.data);
+      allow update: if isOwner(uid) && isValidStreak(request.resource.data) &&
+                      request.resource.data.userId == resource.data.userId;
+    }
+
+    match /reminders/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isValidReminder(request.resource.data);
+      allow update: if isOwner(uid) && isValidReminder(request.resource.data) &&
+                      request.resource.data.userId == resource.data.userId;
+    }
+
+    match /translations/{translationId} {
+      allow read: if true; // Publicly readable for all users
+      allow create: if isAuthenticated() && isValidTranslation(request.resource.data);
+      allow update: if isAdmin();
+    }
+
+    match /curated_lessons/{day} {
+      allow read: if true; // Publicly readable for all users
+      allow write: if isAdmin() && isValidCuratedLesson(request.resource.data);
+    }
+
+    match /chavruta_requests/{requestId} {
+      allow read: if isAuthenticated() && 
+                    (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.gender == resource.data.gender || isAdmin());
+      allow create: if isAuthenticated() && isValidChavrutaRequest(request.resource.data) &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.gender == request.resource.data.gender;
+      allow update: if isAuthenticated() && isDocOwner() && isValidChavrutaRequest(request.resource.data);
+      allow delete: if isAuthenticated() && (isDocOwner() || isAdmin());
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && (request.auth.uid in resource.data.participants || isAdmin());
+      allow create: if isAuthenticated() && isValidChat(request.resource.data);
+      allow update: if isAuthenticated() && (request.auth.uid in resource.data.participants || isAdmin()) && isValidChat(request.resource.data);
+      
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
+        allow create: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants) && isValidChatMessage(request.resource.data);
+      }
+    }
+
+    match /favorites/{favoriteId} {
+      allow read: if isAuthenticated() && (isDocOwner() || isAdmin());
+      allow create: if isAuthenticated() && isValidFavorite(request.resource.data);
+      allow delete: if isAuthenticated() && (isDocOwner() || isAdmin());
+    }
+
+    match /quiz_attempts/{attemptId} {
+      allow read: if isAuthenticated() && (isDocOwner() || isAdmin());
+      allow create: if isAuthenticated() && isValidQuizAttempt(request.resource.data);
+    }
+
+    match /badges/{badgeId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidBadge(request.resource.data);
+      allow update: if false; // Badges are immutable
+      allow delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

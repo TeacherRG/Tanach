@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@media print {
+  /* Hide the main app root contents except the print portal */
+  #root > *:not(.print-only-root) {
+    display: none !important;
+  }
+  
+  /* Ensure #root itself is visible to contain the print portal */
+  #root {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+  
+  /* Hide any other potential screen-only elements */
+  .print-hidden,
+  .no-print {
+    display: none !important;
+  }
+  
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background-color: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Show only the print portal */
+  .print-only-root {
+    display: block !important;
+    visibility: visible !important;
+    position: relative !important;
+    width: 100% !important;
+    height: auto !important;
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 2rem !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Ensure Hebrew and Cyrillic fonts are handled well and elements inside print root are visible */
+  .print-only-root * {
+    visibility: visible !important;
+    display: inherit; /* Allow normal display types (block, flex, etc) to work */
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .verse-print-block {
+    page-break-inside: avoid;
+    margin-bottom: 3rem;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 2rem;
+    display: block !important;
+  }
+
+  /* Ensure the header in print is visible */
+  .print-only-root header {
+    display: block !important;
+    border-bottom: 2px solid black !important;
+    margin-bottom: 2rem !important;
+    padding-bottom: 1rem !important;
+  }
+}
+
+.print-only-root {
+  display: none;
+}
