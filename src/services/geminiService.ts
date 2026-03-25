@@ -11,8 +11,8 @@ function getAI(): GoogleGenAI {
 export async function translateToRussian(text: string): Promise<string> {
   try {
     const response = await getAI().models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Translate the following Jewish commentary on Tanakh to Russian. 
+      model: "gemini-2.5-flash-preview",
+      contents: `Translate the following Jewish commentary on Tanakh to Russian.
       
       CRITICAL TERMINOLOGY RULE:
       Use traditional Jewish terminology and names as used in Russian-speaking Orthodox communities.
@@ -83,7 +83,7 @@ export async function generateQuizQuestions(ref: string, text: string, commentar
     Commentary: ${commentary}`;
 
     const response = await getAI().models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash-preview",
       contents: prompt,
       config: {
         systemInstruction: "You are an expert Tanakh methodologist and educator. Your task is to generate high-quality, pedagogically sound multiple-choice questions. You strictly use traditional Jewish terminology (Moshe, Yehoshua, Tanakh, Bnei Israel, etc.). The questions should vary in difficulty and test both factual recall and deep conceptual understanding of the biblical text and the Steinsaltz commentary. Ensure that the distractors (incorrect options) are plausible but clearly wrong for someone who has studied the material. Return the response as a JSON array of objects with fields: id (number), text (string), options (array of 4 strings), correctAnswer (index 0-3), explanation (string).",
