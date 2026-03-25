@@ -13,7 +13,17 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Initialize Messaging (only if supported in browser)
-export const messaging = typeof window !== "undefined" && "serviceWorker" in navigator ? getMessaging(app) : null;
+// Wrapped in try-catch to prevent module-level errors from crashing the app
+export const messaging = (() => {
+  try {
+    if (typeof window !== "undefined" && "serviceWorker" in navigator && navigator.serviceWorker != null) {
+      return getMessaging(app);
+    }
+  } catch (e) {
+    console.warn("Firebase Messaging initialization failed:", e);
+  }
+  return null;
+})();
 export { getToken, onMessage };
 
 // Error Handling Spec for Firestore Operations
