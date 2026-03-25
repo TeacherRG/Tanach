@@ -134,6 +134,11 @@ export const translations = {
     about: "About the Project",
     help: "Detailed Help",
     privacy: "Privacy Policy",
+    continueAsGuest: "Continue as Guest",
+    guestBannerTitle: "You're browsing as a guest",
+    guestBannerDesc: "Sign in with Google to save your progress, earn badges, and access all features.",
+    signInToSave: "Sign in to Save Progress",
+    guestMode: "Guest Mode",
   },
   ru: {
     title: "Изучение Танаха",
@@ -270,6 +275,11 @@ export const translations = {
     about: "О проекте",
     help: "Подробная помощь",
     privacy: "Политика конфиденциальности",
+    continueAsGuest: "Войти как гость",
+    guestBannerTitle: "Вы просматриваете как гость",
+    guestBannerDesc: "Войдите через Google, чтобы сохранять прогресс, получать значки и использовать все функции.",
+    signInToSave: "Войти для сохранения прогресса",
+    guestMode: "Режим гостя",
   }
 };
 

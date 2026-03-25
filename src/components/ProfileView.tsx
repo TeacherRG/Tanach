@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { auth, db, doc, setDoc, handleFirestoreError, OperationType } from "../firebase";
-import { LogOut, User, Mail, Calendar, ShieldCheck, Check, Languages, Volume2, Gauge, Star, History, Award } from "lucide-react";
+import { auth, db, doc, setDoc, handleFirestoreError, OperationType, googleProvider, signInWithPopup } from "../firebase";
+import { LogOut, User, Mail, Calendar, ShieldCheck, Check, Languages, Volume2, Gauge, Star, History, Award, LogIn } from "lucide-react";
 import { useLanguage } from "../data/LanguageContext";
 import { motion } from "motion/react";
 import { VOICES, SPEEDS } from "../constants";
@@ -17,12 +17,22 @@ export default function ProfileView({ user, userProfile, isAdmin, setActiveTab, 
   const { t, language } = useLanguage();
   const [isUpdating, setIsUpdating] = useState(false);
 
+  const isGuest = user?.isAnonymous;
+
   const handleLogout = async () => {
     try {
       await auth.signOut();
       window.location.reload();
     } catch (error) {
       console.error("Logout failed:", error);
+    }
+  };
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error: any) {
+      console.error("Sign in failed:", error);
     }
   };
 
@@ -61,25 +71,56 @@ export default function ProfileView({ user, userProfile, isAdmin, setActiveTab, 
         </p>
       </header>
 
+      {isGuest && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-amber-50 border border-amber-200 p-6 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center gap-4"
+        >
+          <div className="flex-1 space-y-1">
+            <h3 className="font-bold text-amber-800">{t("guestBannerTitle")}</h3>
+            <p className="text-sm text-amber-700/80">{t("guestBannerDesc")}</p>
+          </div>
+          <button
+            onClick={handleSignIn}
+            className="flex-shrink-0 px-5 py-3 bg-[#141414] text-white rounded-2xl font-bold flex items-center gap-2 hover:scale-[1.02] transition-all text-sm"
+          >
+            <LogIn size={16} />
+            {t("signInWithGoogle")}
+          </button>
+        </motion.div>
+      )}
+
       <div className="bg-white p-10 rounded-[40px] border border-[#141414]/5 shadow-sm space-y-10">
         <div className="flex flex-col md:flex-row items-center gap-8">
           <div className="w-32 h-32 bg-[#141414]/5 rounded-full flex items-center justify-center text-4xl font-bold overflow-hidden border-4 border-white shadow-xl">
             {user.photoURL ? (
               <img src={user.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            ) : isGuest ? (
+              <User size={48} className="text-[#141414]/20" />
             ) : (
-              user.displayName?.[0] || user.email?.[0].toUpperCase()
+              user.displayName?.[0] || user.email?.[0]?.toUpperCase()
             )}
           </div>
-          
+
           <div className="text-center md:text-left space-y-2">
             <h2 className="text-3xl font-bold flex items-center justify-center md:justify-start gap-2">
-              {user.displayName || (language === "ru" ? "Анонимный пользователь" : "Anonymous User")}
+              {isGuest
+                ? (language === "ru" ? "Гость" : "Guest")
+                : user.displayName || (language === "ru" ? "Анонимный пользователь" : "Anonymous User")}
               {isAdmin && <ShieldCheck className="text-blue-500" size={24} />}
             </h2>
-            <div className="flex items-center justify-center md:justify-start gap-2 text-[#141414]/50">
-              <Mail size={16} />
-              <span>{user.email}</span>
-            </div>
+            {!isGuest && (
+              <div className="flex items-center justify-center md:justify-start gap-2 text-[#141414]/50">
+                <Mail size={16} />
+                <span>{user.email}</span>
+              </div>
+            )}
+            {isGuest && (
+              <span className="inline-block px-3 py-1 bg-amber-50 text-amber-600 text-[10px] uppercase tracking-widest font-bold rounded-full">
+                {t("guestMode")}
+              </span>
+            )}
             {isAdmin && (
               <span className="inline-block px-3 py-1 bg-blue-50 text-blue-600 text-[10px] uppercase tracking-widest font-bold rounded-full">
                 Administrator
@@ -280,13 +321,23 @@ export default function ProfileView({ user, userProfile, isAdmin, setActiveTab, 
         </div>
 
         <div className="pt-6 flex flex-col md:flex-row gap-4">
-          <button 
-            onClick={handleLogout}
-            className="flex-1 px-10 py-4 bg-red-50 text-red-600 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-red-100 transition-all"
-          >
-            <LogOut size={20} />
-            {language === "ru" ? "Выйти из системы" : "Sign Out"}
-          </button>
+          {isGuest ? (
+            <button
+              onClick={handleSignIn}
+              className="flex-1 px-10 py-4 bg-[#141414] text-white rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-[#141414]/90 transition-all"
+            >
+              <LogIn size={20} />
+              {t("signInToSave")}
+            </button>
+          ) : (
+            <button
+              onClick={handleLogout}
+              className="flex-1 px-10 py-4 bg-red-50 text-red-600 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-red-100 transition-all"
+            >
+              <LogOut size={20} />
+              {language === "ru" ? "Выйти из системы" : "Sign Out"}
+            </button>
+          )}
         </div>
       </div>
     </div>
