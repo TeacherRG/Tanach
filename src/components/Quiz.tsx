@@ -105,10 +105,14 @@ export default function Quiz({ day, portion, onComplete, curatedQuestions, isAdm
             createdAt: new Date()
           });
         } catch (error) {
-          handleFirestoreError(error, OperationType.CREATE, "quiz_attempts");
+          try {
+            handleFirestoreError(error, OperationType.CREATE, "quiz_attempts");
+          } catch {
+            // Firestore save failed, but quiz should still complete
+          }
         }
       }
-      
+
       // Trigger confetti on finish
       if (score / questions.length >= 0.7) {
         confetti({
@@ -118,7 +122,7 @@ export default function Quiz({ day, portion, onComplete, curatedQuestions, isAdm
           colors: ['#141414', '#F27D26', '#3B82F6', '#10B981']
         });
       }
-      
+
       setIsFinished(true);
     }
   };
