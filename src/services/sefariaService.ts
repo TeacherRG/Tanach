@@ -30,6 +30,28 @@ export async function fetchText(ref: string): Promise<SefariaResponse> {
     throw new Error("Invalid reference");
   }
 
+  // Try v1 API first — it reliably supports commentary=1
+  try {
+    const encodedRef = encodeURIComponent(ref);
+    const v1Response = await axios.get(`https://www.sefaria.org/api/texts/${encodedRef}?context=0&commentary=1`);
+    const v1Data = v1Response.data;
+
+    if (!v1Data.error) {
+      return {
+        he: flatten(v1Data.he),
+        text: flatten(v1Data.text || v1Data.en),
+        ref: v1Data.ref,
+        book: v1Data.book,
+        heBook: v1Data.heBook,
+        sections: v1Data.sections || [],
+        toSections: v1Data.toSections || [],
+        commentary: v1Data.commentary || []
+      };
+    }
+  } catch (e) {
+    // Fall through to v2 variations
+  }
+
   const lastSpaceIndex = ref.lastIndexOf(' ');
   if (lastSpaceIndex === -1) {
     throw new Error("Malformed reference format");
@@ -37,7 +59,7 @@ export async function fetchText(ref: string): Promise<SefariaResponse> {
 
   const bookName = ref.substring(0, lastSpaceIndex);
   const rawRange = ref.substring(lastSpaceIndex + 1);
-  
+
   let range = rawRange;
   const rangeParts = rawRange.split('-');
   if (rangeParts.length === 2) {
@@ -47,11 +69,11 @@ export async function fetchText(ref: string): Promise<SefariaResponse> {
       range = `${startParts[0]}:${startParts[1]}-${endParts[1]}`;
     }
   }
-  
+
   const canonicalRange = range.replace(/:/g, '.');
   const bookNameUnderscore = bookName.replace(/ /g, '_');
-  
-  // Try multiple variations for v2
+
+  // Try v2 API variations as fallback
   const variations = [
     `${bookNameUnderscore}.${canonicalRange}`,
     `${bookName}.${canonicalRange}`,
@@ -82,26 +104,7 @@ export async function fetchText(ref: string): Promise<SefariaResponse> {
     }
   }
 
-  // Fallback to v1
-  try {
-    const originalEncodedRef = encodeURIComponent(ref);
-    const v1Response = await axios.get(`https://www.sefaria.org/api/texts/${originalEncodedRef}?context=0&commentary=1`);
-    const v1Data = v1Response.data;
-    
-    if (v1Data.error) throw new Error(v1Data.error);
-
-    return {
-      ...v1Data,
-      he: flatten(v1Data.he),
-      text: flatten(v1Data.text || v1Data.en),
-      sections: v1Data.sections || [],
-      toSections: v1Data.toSections || [],
-      commentary: v1Data.commentary || []
-    };
-  } catch (v1Error) {
-    console.error(`All Sefaria fetch attempts failed for ref: ${ref}`, v1Error);
-    throw v1Error;
-  }
+  throw new Error(`All Sefaria fetch attempts failed for ref: ${ref}`);
 }
 
 export function formatRef(book: string, chapter: number, verse: number): string {
