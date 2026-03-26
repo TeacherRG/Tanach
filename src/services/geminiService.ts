@@ -36,8 +36,10 @@ export async function generateLesson(enComments: string[]): Promise<LessonResult
 
 Количество вопросов: ${numQuestions}.
 
-Комментарии на английском (каждый комментарий на новой строке):
-${enComments.join("\n")}
+Комментарии на английском (всего ${enComments.length} штук, пронумерованы):
+${enComments.map((c, i) => `[${i + 1}] ${c}`).join("\n")}
+
+ВАЖНО: верни ровно ${enComments.length} переводов в массиве "ruTranslation" — по одному для каждого пронумерованного комментария, строго в том же порядке.
 
 Верни ответ строго в JSON:
 {

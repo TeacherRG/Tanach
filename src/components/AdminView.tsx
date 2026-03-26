@@ -206,13 +206,30 @@ export default function AdminView() {
           ruText: string;
           author: string;
         }>();
-        (portion.enCommentary ?? []).forEach((c, cIdx) => {
+
+        // Ensure ruTranslation has exactly one entry per enCommentary item.
+        // Gemini may return fewer translations than requested, which would shift
+        // all subsequent indices and map wrong Russian text to wrong verses.
+        const enCommentaryList = portion.enCommentary ?? [];
+        const ruTranslations = [...(portion.ruTranslation ?? [])];
+        if (ruTranslations.length !== enCommentaryList.length) {
+          console.warn(
+            `[AdminView] ruTranslation length (${ruTranslations.length}) does not match ` +
+            `enCommentary length (${enCommentaryList.length}) for "${portion.ref}". ` +
+            `Padding with empty strings to prevent index shift.`
+          );
+          while (ruTranslations.length < enCommentaryList.length) {
+            ruTranslations.push("");
+          }
+        }
+
+        enCommentaryList.forEach((c, cIdx) => {
           const verseNum = parseVerseFromRef(c.ref);
           if (verseNum !== null) {
             commentaryByVerse.set(verseNum, {
               ref: c.ref,
               enText: c.text,
-              ruText: portion.ruTranslation[cIdx] ?? "",
+              ruText: ruTranslations[cIdx] ?? "",
               author: c.author ?? "Steinsaltz"
             });
           }
