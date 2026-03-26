@@ -372,31 +372,29 @@ export default function AdminView() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                {/* Translation Section */}
-                <div className="space-y-6">
-                  <h3 className="text-sm uppercase tracking-widest font-bold text-[#141414]/40">Translation</h3>
-                  <div className="space-y-4">
-                    {portion.heText.map((he, vIdx) => (
-                      <div key={vIdx} className="space-y-2">
-                        <div className="flex justify-between text-[10px] font-bold text-[#141414]/20">
-                          <span>Verse {vIdx + 1}</span>
-                          {portion.enText?.[vIdx] && (
-                            <span className="text-right text-[#141414]/30 text-[9px] max-w-[60%] truncate"
-                                  dangerouslySetInnerHTML={{ __html: portion.enText[vIdx] }} />
-                          )}
+                {/* Translation Section — only when loaded from DB */}
+                {portion.ruTranslation.length > 0 && (
+                  <div className="space-y-6">
+                    <h3 className="text-sm uppercase tracking-widest font-bold text-[#141414]/40">Translation</h3>
+                    <div className="space-y-4">
+                      {portion.heText.map((he, vIdx) => (
+                        <div key={vIdx} className="space-y-2">
+                          <div className="flex justify-between text-[10px] font-bold text-[#141414]/20">
+                            <span>Verse {vIdx + 1}</span>
+                          </div>
+                          <textarea
+                            value={portion.ruTranslation[vIdx] || ""}
+                            onChange={(e) => updateTranslation(pIdx, vIdx, e.target.value)}
+                            className="w-full p-4 bg-[#141414]/5 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#141414]/10 transition-all min-h-[80px]"
+                          />
                         </div>
-                        <textarea
-                          value={portion.ruTranslation[vIdx] || ""}
-                          onChange={(e) => updateTranslation(pIdx, vIdx, e.target.value)}
-                          className="w-full p-4 bg-[#141414]/5 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#141414]/10 transition-all min-h-[80px]"
-                        />
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Right Column: Commentary + Quiz */}
-                <div className="space-y-10">
+                <div className={`space-y-10 ${portion.ruTranslation.length === 0 ? "lg:col-span-2" : ""}`}>
                   {/* Steinsaltz Commentary Section */}
                   {portion.enCommentary && portion.enCommentary.length > 0 && (
                     <div className="space-y-6">
