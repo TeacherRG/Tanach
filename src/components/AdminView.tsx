@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { TANAKH_SCHEDULE } from "../data/schedule";
-import { fetchText, SefariaResponse } from "../services/sefariaService";
+import { fetchText, SefariaResponse, fetchSteinsaltzCommentary } from "../services/sefariaService";
 import { generateLesson } from "../services/geminiService";
 import { db, doc, setDoc, handleFirestoreError, OperationType, collection, query, where, getDocs, updateDoc, writeBatch } from "../firebase";
 import { Loader2, Save, Wand2, CheckCircle2, AlertCircle, ChevronRight, ChevronLeft, Users, BookOpen, Search, ShieldCheck } from "lucide-react";
@@ -149,6 +149,12 @@ export default function AdminView() {
           return;
         }
         const sefariaData = await fetchText(p.ref);
+
+        // Fetch Steinsaltz commentary directly from the dedicated Steinsaltz text.
+        // This is far more reliable than filtering commentary=1 on the base text,
+        // which often returns commentary only for the first verse of a range.
+        const steinsaltzEntries = await fetchSteinsaltzCommentary(p.bookName, p.ref);
+
         const newPortion: CuratedPortion = {
           book: p.book,
           ruBook: p.ruBook,
@@ -156,21 +162,11 @@ export default function AdminView() {
           ruRef: p.ruRef,
           heText: sefariaData.he,
           enText: sefariaData.text,
-          enCommentary: (sefariaData.commentary || [])
-            .filter(c => {
-              const isSteinsaltz =
-                c.author?.toLowerCase().includes("steinsaltz") ||
-                c.heAuthor?.includes("שטיינזלץ") ||
-                c.ref?.toLowerCase().includes("steinsaltz");
-              const hasText = (typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : "").trim();
-              const hasHe = (typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "").trim();
-              return isSteinsaltz && (hasText || hasHe);
-            })
-            .map(c => ({
-              ref: c.ref,
-              text: typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "",
-              author: c.author || c.heAuthor || "Steinsaltz"
-            })),
+          enCommentary: steinsaltzEntries.map(s => ({
+            ref: s.ref,
+            text: s.text,
+            author: "Steinsaltz",
+          })),
           ruTranslation: [],
           quiz: []
         };
@@ -178,8 +174,8 @@ export default function AdminView() {
         setStatus({
           type: "success",
           message: (newPortion.enCommentary?.length ?? 0) > 0
-            ? "Loaded from Sefaria with Steinsaltz commentary. Translation and quiz not yet generated."
-            : "Loaded from Sefaria. No Steinsaltz commentary found. Translation and quiz not yet generated."
+            ? `Loaded from Sefaria with Steinsaltz commentary (${newPortion.enCommentary!.length} verses). Translation and quiz not yet generated.`
+            : "Loaded from Sefaria. No Steinsaltz commentary found — check the book name mapping. Translation and quiz not yet generated."
         });
       }
     } catch (err) {
