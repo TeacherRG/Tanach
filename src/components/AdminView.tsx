@@ -94,7 +94,7 @@ export default function AdminView() {
     try {
       const newPortions: CuratedPortion[] = [...portions];
       for (let i = 0; i < newPortions.length; i++) {
-        const result = await generateLesson(newPortions[i].heText);
+        const result = await generateLesson((newPortions[i].enCommentary ?? []).map(c => c.text));
         newPortions[i] = { ...newPortions[i], ...result };
       }
       setPortions(newPortions);
@@ -392,10 +392,10 @@ export default function AdminView() {
                   <div className="space-y-6">
                     <h3 className="text-sm uppercase tracking-widest font-bold text-[#141414]/40">Translation</h3>
                     <div className="space-y-4">
-                      {portion.heText.map((he, vIdx) => (
+                      {(portion.enCommentary ?? []).map((c, vIdx) => (
                         <div key={vIdx} className="space-y-2">
                           <div className="flex justify-between text-[10px] font-bold text-[#141414]/20">
-                            <span>Verse {vIdx + 1}</span>
+                            <span>{c.ref}</span>
                           </div>
                           <textarea
                             value={portion.ruTranslation[vIdx] || ""}
