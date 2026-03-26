@@ -75,22 +75,31 @@ export default function AdminView() {
 
   const fetchAndGenerate = async () => {
     if (!dayData || !dayData.isStudyDay) return;
-    
+
+    if (portions.length === 0) {
+      setStatus({ type: "error", message: "Please click Load first to load the Hebrew text." });
+      return;
+    }
+
+    const alreadyGenerated = portions.every(p => p.ruTranslation.length > 0 && p.quiz.length > 0);
+    if (alreadyGenerated) {
+      setStatus({ type: "error", message: "Content already loaded from database. Use Refine to improve translations." });
+      return;
+    }
+
     setGenerating(true);
     setStatus(null);
     try {
-      const newPortions: CuratedPortion[] = [];
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const newPortions: CuratedPortion[] = [...portions];
 
-      for (const p of dayData.portions) {
-        const sefariaData = await fetchText(p.ref);
-        
-        // Prepare prompt for Gemini
-        const heTextStr = sefariaData.he.join("\n");
+      for (let i = 0; i < newPortions.length; i++) {
+        const p = newPortions[i];
+        const heTextStr = p.heText.join("\n");
         const prompt = `
           You are an expert in Jewish Tanakh studies and translation, specializing in Russian Jewish Orthodox terminology and style.
           Translate the following Hebrew text into Russian.
-          
+
           CRITICAL RULES FOR TRANSLATION:
           1. STYLE: Use a style appropriate for Russian-speaking Orthodox Jews. The language should be accurate, natural-sounding, and respectful.
           2. TERMINOLOGY:
@@ -108,12 +117,12 @@ export default function AdminView() {
              - "Шломо" instead of "Соломон".
              - "Давид", "Авраам", "Ицхак", "Яаков" (not Иаков).
           4. ACCURACY: Ensure the translation captures the nuances of the Hebrew text according to traditional Jewish commentary (like Rashi or Steinsaltz).
-          
+
           Also, generate 3 multiple-choice quiz questions based on the text. For each question, provide a brief explanation (in Russian) of why the correct answer is right, referencing the text or Jewish tradition.
-          
+
           Hebrew Text:
           ${heTextStr}
-          
+
           Return the response in JSON format:
           {
             "ruTranslation": ["verse 1 translation", "verse 2 translation", ...],
@@ -157,18 +166,13 @@ export default function AdminView() {
         });
 
         const result = JSON.parse(response.text);
-        
-        newPortions.push({
-          book: p.book,
-          ruBook: p.ruBook,
-          ref: p.ref,
-          ruRef: p.ruRef,
-          heText: sefariaData.he,
+        newPortions[i] = {
+          ...p,
           ruTranslation: result.ruTranslation,
-          quiz: result.quiz.map((q: any, i: number) => ({ ...q, id: `q_${i}` }))
-        });
+          quiz: result.quiz.map((q: any, idx: number) => ({ ...q, id: `q_${idx}` }))
+        };
       }
-      
+
       setPortions(newPortions);
       setStatus({ type: "success", message: "Content generated successfully!" });
     } catch (err) {
