@@ -137,11 +137,13 @@ export default function AdminView() {
                   c.author?.toLowerCase().includes("steinsaltz") ||
                   c.heAuthor?.includes("שטיינזלץ") ||
                   c.ref?.toLowerCase().includes("steinsaltz");
-                return isSteinsaltz && (c.text?.trim() || c.he?.trim());
+                const hasText = (typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : "").trim();
+                const hasHe = (typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "").trim();
+                return isSteinsaltz && (hasText || hasHe);
               })
               .map(c => ({
                 ref: c.ref,
-                text: c.text || c.he || "",
+                text: typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "",
                 author: c.author || c.heAuthor || "Steinsaltz"
               })),
             ruTranslation: [],
