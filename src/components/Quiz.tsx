@@ -5,8 +5,7 @@ import { useLanguage } from "../data/LanguageContext";
 import { Portion } from "../services/schedulerService";
 import { fetchText } from "../services/sefariaService";
 import { generateQuizQuestions, Question } from "../services/geminiService";
-import { getStaticQuiz } from "../data/quizzes";
-import { db, collection, addDoc, auth, handleFirestoreError, OperationType } from "../firebase";
+import { db, collection, addDoc, auth, handleFirestoreError, OperationType, getDocs, query, where } from "../firebase";
 import confetti from "canvas-confetti";
 
 interface QuizProps {
@@ -30,24 +29,44 @@ export default function Quiz({ day, portion, onComplete, isAdmin }: QuizProps) {
 
   useEffect(() => {
     async function prepareQuiz() {
-      // 1. Check if we have a static quiz for this portion
-      const staticQuiz = getStaticQuiz(portion.ref, language);
-      if (staticQuiz) {
-        setQuestions(staticQuiz);
-        setLoading(false);
-        return;
+      // 1. Load curated questions from Firestore quiz_questions collection
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, "quiz_questions"),
+            where("day", "==", day),
+            where("track", "==", portion.track)
+          )
+        );
+        if (!snap.empty) {
+          const loaded: Question[] = snap.docs.map((d, idx) => {
+            const q = d.data();
+            return {
+              id: idx,
+              text: q.text,
+              options: q.options,
+              correctAnswer: q.correctAnswer,
+              explanation: q.explanation ?? ""
+            };
+          });
+          setQuestions(loaded);
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load quiz from Firestore:", error);
       }
 
-      // For regular users, if no curated questions exist, don't generate them
+      // For regular users, if no curated questions exist, show "coming soon"
       if (!isAdmin) {
         setLoading(false);
         setQuestions([]);
         return;
       }
 
+      // 3. Admin fallback: dynamic generation from Sefaria
       setLoading(true);
       try {
-        // 2. Fallback to dynamic generation if no static quiz exists (only for admins)
         const data = await fetchText(portion.ref);
         const text = data.text.join(" ");
         const commentary = data.commentary?.map(c => c.text || c.he || "").join("\n") || "";
@@ -60,7 +79,7 @@ export default function Quiz({ day, portion, onComplete, isAdmin }: QuizProps) {
       }
     }
     prepareQuiz();
-  }, [portion, language, isAdmin]);
+  }, [portion, day, language, isAdmin]);
 
   const handleCheck = () => {
     if (selectedIdx === null || questions.length === 0) return;

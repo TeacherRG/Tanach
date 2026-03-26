@@ -7,13 +7,26 @@ import { useLanguage } from "../data/LanguageContext";
 import SharedCommentary from "./SharedCommentary";
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import { db, collection, addDoc, auth, handleFirestoreError, OperationType } from "../firebase";
+import { db, collection, addDoc, auth, handleFirestoreError, OperationType, getDocs, query, orderBy } from "../firebase";
 import { toast } from "sonner";
 import { VOICES, SPEEDS } from "../constants";
 import { pcmToWav } from "../lib/audioUtils";
 import confetti from "canvas-confetti";
 
 import PrintPortion from "./PrintPortion";
+
+interface FirestoreVerse {
+  verseNumber: number;
+  chapter: number;
+  heText: string;
+  enText: string;
+  commentary: {
+    ref: string;
+    enText: string;
+    ruText: string;
+    author: string;
+  } | null;
+}
 
 interface LessonViewProps {
   day: number;
@@ -37,6 +50,8 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
   const [currentVerseIndex, setCurrentVerseIndex] = useState(0);
 
   const [viewMode, setViewMode] = useState<"step" | "full">("step");
+  // Verse data loaded from Firestore: keyed by absolute verse number
+  const [firestoreVerses, setFirestoreVerses] = useState<Map<number, FirestoreVerse> | null>(null);
 
   const textLanguage = userProfile?.textLanguage || "both";
   const voice = userProfile?.readingVoice || "Zephyr";
@@ -129,8 +144,47 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
   useEffect(() => {
     async function load() {
       setCurrentVerseIndex(0);
+      setFirestoreVerses(null);
       setLoading(true);
       try {
+        // 1. Try Firestore verses subcollection first (curated content)
+        const lessonId = `${day}_${portion.track}`;
+        const versesSnap = await getDocs(
+          query(collection(db, "lessons", lessonId, "verses"), orderBy("verseNumber"))
+        );
+
+        if (!versesSnap.empty) {
+          const map = new Map<number, FirestoreVerse>();
+          versesSnap.docs.forEach(d => {
+            const v = d.data() as FirestoreVerse;
+            map.set(v.verseNumber, v);
+          });
+          setFirestoreVerses(map);
+
+          const sorted = Array.from(map.values());
+          // Build a SefariaResponse-compatible object so all existing rendering works
+          setData({
+            he: sorted.map(v => v.heText),
+            text: sorted.map(v => v.enText),
+            ref: portion.ref,
+            book: portion.book,
+            heBook: "",
+            sections: [sorted[0]?.chapter ?? 1, sorted[0]?.verseNumber ?? 1],
+            toSections: [sorted[0]?.chapter ?? 1, sorted[sorted.length - 1]?.verseNumber ?? 1],
+            // Commentary array: one entry per verse that has Steinsaltz notes
+            commentary: sorted
+              .filter(v => v.commentary !== null)
+              .map(v => ({
+                ref: v.commentary!.ref,
+                text: v.commentary!.enText,
+                he: v.commentary!.enText,
+                author: v.commentary!.author,
+              }))
+          });
+          return;
+        }
+
+        // 2. Fallback: load live from Sefaria API
         const result = await fetchText(portion.ref);
         setData(result);
       } catch (err) {
@@ -140,7 +194,7 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
       }
     }
     load();
-  }, [portion.ref, isAdmin]);
+  }, [portion.ref, day, isAdmin]);
 
   const saveToFavorites = async (type: 'verse' | 'commentary', content: string, ref: string, id: string) => {
     if (!auth.currentUser) return;
@@ -439,11 +493,13 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
                           {verseCommentary.map((comm, cIdx) => {
                             const commId = `${idx}_${cIdx}`;
                             const originalText = comm.text || comm.he || "";
+                            // If data came from Firestore, ruText is already stored on the verse
+                            const ruText = firestoreVerses?.get(verseNum)?.commentary?.ruText ?? null;
 
                             return (
                               <div key={commId} className="bg-[#141414]/[0.02] p-6 rounded-[24px] border border-[#141414]/5 relative overflow-hidden group/comm">
                                 <div className="absolute top-0 left-0 w-1 h-full bg-[#141414]/10" />
-                                
+
                                 <button
                                   onClick={() => saveToFavorites('commentary', originalText, `${portion.book} ${chapter}:${verseNum} (Commentary)`, `c_${commId}`)}
                                   disabled={savingFav === `c_${commId}`}
@@ -453,11 +509,18 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
                                   {savingFav === `c_${commId}` ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} />}
                                 </button>
 
-                                <SharedCommentary 
-                                  day={day}
-                                  index={commId}
-                                  originalText={originalText}
-                                />
+                                {ruText ? (
+                                  // Curated content: show stored Russian translation directly
+                                  <div className="text-base leading-relaxed text-[#141414]/70 font-serif italic"
+                                       dangerouslySetInnerHTML={{ __html: ruText }} />
+                                ) : (
+                                  // Sefaria fallback: translate on-the-fly via SharedCommentary
+                                  <SharedCommentary
+                                    day={day}
+                                    index={commId}
+                                    originalText={originalText}
+                                  />
+                                )}
                               </div>
                             );
                           })}
