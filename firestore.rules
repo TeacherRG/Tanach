@@ -254,6 +254,23 @@ service cloud.firestore {
       allow write: if isAdmin() && isValidCuratedLesson(request.resource.data);
     }
 
+    // Granular lesson storage: one document per lesson, verses as subcollection
+    match /lessons/{lessonId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /verses/{verseId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    // Quiz questions: separate collection, one document per question
+    match /quiz_questions/{questionId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /chavruta_requests/{requestId} {
       allow read: if isAuthenticated() && 
                     (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.gender == resource.data.gender || isAdmin());
