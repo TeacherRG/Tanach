@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { TANAKH_SCHEDULE } from "../data/schedule";
 import { fetchText, SefariaResponse } from "../services/sefariaService";
-import { GoogleGenAI, Type } from "@google/genai";
+import { generateLesson } from "../services/geminiService";
 import { db, doc, setDoc, handleFirestoreError, OperationType, collection, query, where, getDocs, updateDoc } from "../firebase";
-import { Loader2, Save, Wand2, CheckCircle2, AlertCircle, ChevronRight, ChevronLeft, Users, BookOpen, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { Loader2, Save, Wand2, CheckCircle2, AlertCircle, ChevronRight, ChevronLeft, Users, BookOpen, Search, ShieldCheck } from "lucide-react";
 import { useLanguage } from "../data/LanguageContext";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -83,96 +83,18 @@ export default function AdminView() {
 
     const alreadyGenerated = portions.every(p => p.ruTranslation.length > 0 && p.quiz.length > 0);
     if (alreadyGenerated) {
-      setStatus({ type: "error", message: "Content already loaded from database. Use Refine to improve translations." });
+      setStatus({ type: "error", message: "Content already loaded from database. Edit manually or reload and regenerate." });
       return;
     }
 
     setGenerating(true);
     setStatus(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       const newPortions: CuratedPortion[] = [...portions];
-
       for (let i = 0; i < newPortions.length; i++) {
-        const p = newPortions[i];
-        const heTextStr = p.heText.join("\n");
-        const prompt = `
-          You are an expert in Jewish Tanakh studies and translation, specializing in Russian Jewish Orthodox terminology and style.
-          Translate the following Hebrew text into Russian.
-
-          CRITICAL RULES FOR TRANSLATION:
-          1. STYLE: Use a style appropriate for Russian-speaking Orthodox Jews. The language should be accurate, natural-sounding, and respectful.
-          2. TERMINOLOGY:
-             - Use "Вс-вышний", "Г-сподь", or "Ашем" for G-d. Use hyphens in G-d's names (Б-г, Г-сподь).
-             - Use "Танах" instead of "Ветхий Завет".
-             - Use "Бней Исраэль" instead of "сыны Израилевы".
-             - Use "Коэн" instead of "священник".
-             - Use "Мишкан" instead of "Скиния".
-             - Use "Арон а-Кодеш" or "Арон а-Брит" instead of "Ковчег".
-          3. NAMES: Use traditional Jewish names:
-             - "Моше" instead of "Моисей".
-             - "Йеошуа" instead of "Иисус Навин".
-             - "Аарон" (with double 'a').
-             - "Йерихо" instead of "Иерихон".
-             - "Шломо" instead of "Соломон".
-             - "Давид", "Авраам", "Ицхак", "Яаков" (not Иаков).
-          4. ACCURACY: Ensure the translation captures the nuances of the Hebrew text according to traditional Jewish commentary (like Rashi or Steinsaltz).
-
-          Also, generate 3 multiple-choice quiz questions based on the text. For each question, provide a brief explanation (in Russian) of why the correct answer is right, referencing the text or Jewish tradition.
-
-          Hebrew Text:
-          ${heTextStr}
-
-          Return the response in JSON format:
-          {
-            "ruTranslation": ["verse 1 translation", "verse 2 translation", ...],
-            "quiz": [
-              {
-                "text": "Question text?",
-                "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-                "correctAnswer": 0,
-                "explanation": "Brief explanation in Russian"
-              }
-            ]
-          }
-        `;
-
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash-preview",
-          contents: [{ parts: [{ text: prompt }] }],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                ruTranslation: { type: Type.ARRAY, items: { type: Type.STRING } },
-                quiz: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      text: { type: Type.STRING },
-                      options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                      correctAnswer: { type: Type.INTEGER },
-                      explanation: { type: Type.STRING }
-                    },
-                    required: ["text", "options", "correctAnswer", "explanation"]
-                  }
-                }
-              },
-              required: ["ruTranslation", "quiz"]
-            }
-          }
-        });
-
-        const result = JSON.parse(response.text);
-        newPortions[i] = {
-          ...p,
-          ruTranslation: result.ruTranslation,
-          quiz: result.quiz.map((q: any, idx: number) => ({ ...q, id: `q_${idx}` }))
-        };
+        const result = await generateLesson(newPortions[i].heText);
+        newPortions[i] = { ...newPortions[i], ...result };
       }
-
       setPortions(newPortions);
       setStatus({ type: "success", message: "Content generated successfully!" });
     } catch (err) {
@@ -217,71 +139,6 @@ export default function AdminView() {
       handleFirestoreError(err, OperationType.LIST, "curated_lessons");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const refineTranslations = async () => {
-    if (portions.length === 0) return;
-    
-    setGenerating(true);
-    setStatus(null);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const nextPortions = [...portions];
-
-      for (let i = 0; i < nextPortions.length; i++) {
-        const p = nextPortions[i];
-        const prompt = `
-          You are an expert in Jewish Tanakh studies and translation, specializing in Russian Jewish Orthodox terminology and style.
-          I have some existing Russian translations of Tanakh verses. Please refine them to be more accurate, natural-sounding, and strictly follow Russian Jewish Orthodox style.
-          
-          CRITICAL RULES FOR REFINEMENT:
-          1. STYLE: Use a style appropriate for Russian-speaking Orthodox Jews. The language should be accurate, natural-sounding, and respectful.
-          2. TERMINOLOGY:
-             - Use "Вс-вышний", "Г-сподь", or "Ашем" for G-d. Use hyphens in G-d's names (Б-г, Г-сподь).
-             - Use "Танах" instead of "Ветхий Завет".
-             - Use "Бней Исраэль" instead of "сыны Израилевы".
-             - Use "Коэн" instead of "священник".
-             - Use "Мишкан" instead of "Скиния".
-             - Use "Арон а-Кодеш" or "Арон а-Брит" instead of "Ковчег".
-          3. NAMES: Use traditional Jewish names (Моше, Йеошуа, Аарон, Йерихо, Шломо, Давид, Авраам, Ицхак, Яаков).
-          4. ACCURACY: Ensure the translation captures the nuances of the Hebrew text.
-          
-          Original Hebrew and Current Russian:
-          ${p.heText.map((he, idx) => `V${idx + 1} HE: ${he}\nV${idx + 1} RU: ${p.ruTranslation[idx]}`).join("\n\n")}
-          
-          Return the refined translations as a JSON array of strings:
-          {
-            "refinedTranslations": ["verse 1 refined", "verse 2 refined", ...]
-          }
-        `;
-
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash-preview",
-          contents: [{ parts: [{ text: prompt }] }],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                refinedTranslations: { type: Type.ARRAY, items: { type: Type.STRING } }
-              },
-              required: ["refinedTranslations"]
-            }
-          }
-        });
-
-        const result = JSON.parse(response.text);
-        nextPortions[i].ruTranslation = result.refinedTranslations;
-      }
-      
-      setPortions(nextPortions);
-      setStatus({ type: "success", message: "Translations refined successfully!" });
-    } catch (err) {
-      console.error("Refinement error:", err);
-      setStatus({ type: "error", message: "Failed to refine translations." });
-    } finally {
-      setGenerating(false);
     }
   };
 
@@ -374,14 +231,6 @@ export default function AdminView() {
             >
               {generating ? <Loader2 className="animate-spin" size={18} /> : <Wand2 size={18} />}
               Generate
-            </button>
-            <button 
-              onClick={refineTranslations}
-              disabled={generating || portions.length === 0}
-              className="flex items-center gap-2 px-6 py-2 bg-purple-500 text-white rounded-full font-bold hover:bg-purple-600 transition-all disabled:opacity-50"
-            >
-              {generating ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
-              Refine
             </button>
             <button 
               onClick={handleSave}
