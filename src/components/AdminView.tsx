@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { TANAKH_SCHEDULE } from "../data/schedule";
 import { fetchText, SefariaResponse } from "../services/sefariaService";
 import { generateLesson } from "../services/geminiService";
-import { db, doc, setDoc, handleFirestoreError, OperationType, collection, query, where, getDocs, updateDoc } from "../firebase";
+import { db, doc, setDoc, handleFirestoreError, OperationType, collection, query, where, getDocs, updateDoc, writeBatch } from "../firebase";
 import { Loader2, Save, Wand2, CheckCircle2, AlertCircle, ChevronRight, ChevronLeft, Users, BookOpen, Search, ShieldCheck } from "lucide-react";
 import { useLanguage } from "../data/LanguageContext";
 import { motion, AnimatePresence } from "motion/react";
@@ -23,6 +23,20 @@ interface CuratedPortion {
     correctAnswer: number;
     explanation: string;
   }>;
+}
+
+// Parse chapter and starting verse from a ref like "Joshua 1:1-18" or "Kings 2:5"
+function parseChapterVerse(ref: string): { chapter: number; startVerse: number } {
+  const match = ref.match(/(\d+):(\d+)/);
+  if (!match) return { chapter: 1, startVerse: 1 };
+  return { chapter: parseInt(match[1]), startVerse: parseInt(match[2]) };
+}
+
+// Extract the first verse number mentioned in a Sefaria ref
+// e.g., "Steinsaltz on Joshua 1:5" → 5, "Joshua 1:5-7" → 5
+function parseVerseFromRef(ref: string): number | null {
+  const match = ref.match(/:(\d+)/);
+  return match ? parseInt(match[1]) : null;
 }
 
 export default function AdminView() {
@@ -169,18 +183,76 @@ export default function AdminView() {
 
   const handleSave = async () => {
     if (portions.length === 0) return;
-    
+
     setLoading(true);
     try {
-      await setDoc(doc(db, "curated_lessons", selectedDay.toString()), {
-        day: selectedDay,
-        portions,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
+      const tracks = ["neviim", "ketuvim"] as const;
+      const batch = writeBatch(db);
+
+      for (let pIdx = 0; pIdx < portions.length; pIdx++) {
+        const portion = portions[pIdx];
+        const track = tracks[pIdx] ?? `portion_${pIdx}`;
+        const lessonId = `${selectedDay}_${track}`;
+        const { chapter, startVerse } = parseChapterVerse(portion.ref);
+
+        // Build a map: absolute verse number → commentary + Russian translation
+        // Commentary ref from Sefaria looks like "Steinsaltz on Joshua 1:5"
+        const commentaryByVerse = new Map<number, {
+          ref: string;
+          enText: string;
+          ruText: string;
+          author: string;
+        }>();
+        (portion.enCommentary ?? []).forEach((c, cIdx) => {
+          const verseNum = parseVerseFromRef(c.ref);
+          if (verseNum !== null) {
+            commentaryByVerse.set(verseNum, {
+              ref: c.ref,
+              enText: c.text,
+              ruText: portion.ruTranslation[cIdx] ?? "",
+              author: c.author ?? "Steinsaltz"
+            });
+          }
+        });
+
+        // 1. Lesson-level document: metadata + quiz only, no big text arrays
+        const lessonRef = doc(db, "lessons", lessonId);
+        batch.set(lessonRef, {
+          day: selectedDay,
+          track,
+          book: portion.book,
+          ruBook: portion.ruBook,
+          ref: portion.ref,
+          ruRef: portion.ruRef,
+          chapter,
+          startVerse,
+          verseCount: portion.heText.length,
+          quiz: portion.quiz,
+          updatedAt: new Date()
+        });
+
+        // 2. One document per verse in subcollection verses/
+        // Document ID = absolute verse number (e.g., "5" for verse 5)
+        for (let vIdx = 0; vIdx < portion.heText.length; vIdx++) {
+          const absVerse = startVerse + vIdx;
+          const verseRef = doc(db, "lessons", lessonId, "verses", String(absVerse));
+          const commentary = commentaryByVerse.get(absVerse) ?? null;
+
+          batch.set(verseRef, {
+            verseNumber: absVerse,
+            chapter,
+            heText: portion.heText[vIdx] ?? "",
+            enText: portion.enText?.[vIdx] ?? "",
+            // commentary is null if Steinsaltz has no note for this verse
+            commentary
+          });
+        }
+      }
+
+      await batch.commit();
       setStatus({ type: "success", message: "Lesson saved to Firestore!" });
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `curated_lessons/${selectedDay}`);
+      handleFirestoreError(err, OperationType.WRITE, `lessons/${selectedDay}`);
       setStatus({ type: "error", message: "Failed to save lesson." });
     } finally {
       setLoading(false);
