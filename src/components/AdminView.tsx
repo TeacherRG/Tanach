@@ -192,7 +192,9 @@ export default function AdminView() {
         setPortions(data.portions || []);
         setStatus({ type: "success", message: "Existing content loaded!" });
       } else {
-        setStatus({ type: "error", message: "No curated content found for this day." });
+        setLoading(false);
+        await fetchAndGenerate();
+        return;
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.LIST, "curated_lessons");
