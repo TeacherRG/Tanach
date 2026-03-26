@@ -411,7 +411,8 @@ export default function AdminView() {
                     </div>
                   )}
 
-                {/* Quiz Section */}
+                {/* Quiz Section — only when loaded from DB */}
+                {portion.quiz.length > 0 && (
                 <div className="space-y-6">
                   <h3 className="text-sm uppercase tracking-widest font-bold text-[#141414]/40">Quiz Questions</h3>
                   <div className="space-y-8">
@@ -462,6 +463,7 @@ export default function AdminView() {
                     ))}
                   </div>
                 </div>
+                )}
                 </div>
               </div>
             </div>
