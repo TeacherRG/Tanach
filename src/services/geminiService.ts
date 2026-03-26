@@ -30,18 +30,18 @@ export interface LessonResult {
   }>;
 }
 
-export async function generateLesson(heText: string[]): Promise<LessonResult> {
-  const numQuestions = Math.min(Math.max(heText.length, 3), 10);
+export async function generateLesson(enComments: string[]): Promise<LessonResult> {
+  const numQuestions = Math.min(Math.max(enComments.length, 3), 10);
   const prompt = `${aiPrompt.taskPrompt}
 
 Количество вопросов: ${numQuestions}.
 
-Текст на иврите (каждый стих на новой строке):
-${heText.join("\n")}
+Комментарии на английском (каждый комментарий на новой строке):
+${enComments.join("\n")}
 
 Верни ответ строго в JSON:
 {
-  "ruTranslation": ["перевод стиха 1", "перевод стиха 2", ...],
+  "ruTranslation": ["перевод комментария 1", "перевод комментария 2", ...],
   "quiz": [
     {
       "text": "Вопрос?",
