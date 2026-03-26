@@ -5,7 +5,6 @@ import { useLanguage } from "../data/LanguageContext";
 import { Portion } from "../services/schedulerService";
 import { fetchText } from "../services/sefariaService";
 import { generateQuizQuestions, Question } from "../services/geminiService";
-import { getStaticQuiz } from "../data/quizzes";
 import { db, collection, addDoc, auth, handleFirestoreError, OperationType, getDocs, query, where } from "../firebase";
 import confetti from "canvas-confetti";
 
@@ -30,15 +29,7 @@ export default function Quiz({ day, portion, onComplete, isAdmin }: QuizProps) {
 
   useEffect(() => {
     async function prepareQuiz() {
-      // 1. Check if we have a static quiz for this portion
-      const staticQuiz = getStaticQuiz(portion.ref);
-      if (staticQuiz) {
-        setQuestions(staticQuiz);
-        setLoading(false);
-        return;
-      }
-
-      // 2. Load curated questions from Firestore quiz_questions collection
+      // 1. Load curated questions from Firestore quiz_questions collection
       try {
         const snap = await getDocs(
           query(
