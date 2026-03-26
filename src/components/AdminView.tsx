@@ -181,20 +181,33 @@ export default function AdminView() {
 
   const loadExisting = async () => {
     if (!dayData || !dayData.isStudyDay) return;
-    
+
     setLoading(true);
     setStatus(null);
     try {
       const snapshot = await getDocs(query(collection(db, "curated_lessons"), where("day", "==", selectedDay)));
-      
+
       if (!snapshot.empty) {
         const data = snapshot.docs[0].data();
         setPortions(data.portions || []);
         setStatus({ type: "success", message: "Existing content loaded!" });
       } else {
-        setLoading(false);
-        await fetchAndGenerate();
-        return;
+        // Not in DB — fetch Hebrew text from Sefaria only, no generation
+        const newPortions: CuratedPortion[] = [];
+        for (const p of dayData.portions) {
+          const sefariaData = await fetchText(p.ref);
+          newPortions.push({
+            book: p.book,
+            ruBook: p.ruBook,
+            ref: p.ref,
+            ruRef: p.ruRef,
+            heText: sefariaData.he,
+            ruTranslation: [],
+            quiz: []
+          });
+        }
+        setPortions(newPortions);
+        setStatus({ type: "success", message: "Loaded from Sefaria. Translation and quiz not yet generated." });
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.LIST, "curated_lessons");
