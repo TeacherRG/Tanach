@@ -25,11 +25,14 @@ interface CuratedPortion {
   }>;
 }
 
-// Parse chapter and starting verse from a ref like "Joshua 1:1-18" or "Kings 2:5"
-function parseChapterVerse(ref: string): { chapter: number; startVerse: number } {
-  const match = ref.match(/(\d+):(\d+)/);
-  if (!match) return { chapter: 1, startVerse: 1 };
-  return { chapter: parseInt(match[1]), startVerse: parseInt(match[2]) };
+// Parse chapter and verse range from a ref like "Joshua 1:1-18" or "Kings 2:5"
+function parseVerseRange(ref: string): { chapter: number; startVerse: number; endVerse: number } {
+  const match = ref.match(/(\d+):(\d+)(?:-(\d+))?/);
+  if (!match) return { chapter: 1, startVerse: 1, endVerse: 1 };
+  const chapter = parseInt(match[1]);
+  const startVerse = parseInt(match[2]);
+  const endVerse = match[3] ? parseInt(match[3]) : startVerse;
+  return { chapter, startVerse, endVerse };
 }
 
 // Extract the first verse number mentioned in a Sefaria ref
@@ -193,7 +196,7 @@ export default function AdminView() {
         const portion = portions[pIdx];
         const track = tracks[pIdx] ?? `portion_${pIdx}`;
         const lessonId = `${selectedDay}_${track}`;
-        const { chapter, startVerse } = parseChapterVerse(portion.ref);
+        const { chapter, startVerse, endVerse } = parseVerseRange(portion.ref);
 
         // Build a map: absolute verse number → commentary + Russian translation
         // Commentary ref from Sefaria looks like "Steinsaltz on Joshua 1:5"
@@ -215,7 +218,7 @@ export default function AdminView() {
           }
         });
 
-        // 1. Lesson-level document: metadata + quiz only, no big text arrays
+        // 1. Lesson-level document: metadata only, no text arrays, no quiz
         const lessonRef = doc(db, "lessons", lessonId);
         batch.set(lessonRef, {
           day: selectedDay,
@@ -226,8 +229,8 @@ export default function AdminView() {
           ruRef: portion.ruRef,
           chapter,
           startVerse,
+          endVerse,
           verseCount: portion.heText.length,
-          quiz: portion.quiz,
           updatedAt: new Date()
         });
 
@@ -247,6 +250,26 @@ export default function AdminView() {
             commentary
           });
         }
+
+        // 3. Quiz questions — separate collection, each question knows its verse range
+        // Document ID: {day}_{track}_{qIdx} for deterministic overwrite on re-save
+        portion.quiz.forEach((q, qIdx) => {
+          const quizRef = doc(db, "quiz_questions", `${selectedDay}_${track}_${qIdx}`);
+          batch.set(quizRef, {
+            day: selectedDay,
+            track,
+            book: portion.book,
+            ruBook: portion.ruBook,
+            chapter,
+            verseStart: startVerse,
+            verseEnd: endVerse,
+            text: q.text,
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+            updatedAt: new Date()
+          });
+        });
       }
 
       await batch.commit();
