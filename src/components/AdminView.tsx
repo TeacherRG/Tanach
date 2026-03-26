@@ -120,7 +120,7 @@ export default function AdminView() {
         setPortions(data.portions || []);
         setStatus({ type: "success", message: "Existing content loaded!" });
       } else {
-        // Not in DB — fetch Hebrew text from Sefaria only, no generation
+        // Not in DB — fetch Hebrew text + Steinsaltz commentary from Sefaria
         const newPortions: CuratedPortion[] = [];
         for (const p of dayData.portions) {
           const sefariaData = await fetchText(p.ref);
@@ -132,21 +132,34 @@ export default function AdminView() {
             heText: sefariaData.he,
             enText: sefariaData.text,
             enCommentary: (sefariaData.commentary || [])
-              .filter(c => c.text && c.text.trim())
+              .filter(c => {
+                const isSteinsaltz =
+                  c.author?.toLowerCase().includes("steinsaltz") ||
+                  c.heAuthor?.includes("שטיינזלץ") ||
+                  c.ref?.toLowerCase().includes("steinsaltz");
+                return isSteinsaltz && (c.text?.trim() || c.he?.trim());
+              })
               .map(c => ({
                 ref: c.ref,
-                text: c.text || "",
-                author: c.author || c.heAuthor || "Commentary"
+                text: c.text || c.he || "",
+                author: c.author || c.heAuthor || "Steinsaltz"
               })),
             ruTranslation: [],
             quiz: []
           });
         }
         setPortions(newPortions);
-        setStatus({ type: "success", message: "Loaded from Sefaria. Translation and quiz not yet generated." });
+        const hasCommentary = newPortions.some(p => (p.enCommentary?.length ?? 0) > 0);
+        setStatus({
+          type: "success",
+          message: hasCommentary
+            ? "Loaded from Sefaria with Steinsaltz commentary. Translation and quiz not yet generated."
+            : "Loaded from Sefaria. No Steinsaltz commentary found. Translation and quiz not yet generated."
+        });
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.LIST, "curated_lessons");
+      console.error("Load error:", err);
+      setStatus({ type: "error", message: `Failed to load: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
       setLoading(false);
     }
