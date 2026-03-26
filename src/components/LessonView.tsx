@@ -491,7 +491,7 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
                       {verseCommentary.length > 0 ? (
                         <div className="space-y-4">
                           {verseCommentary.map((comm, cIdx) => {
-                            const commId = `${idx}_${cIdx}`;
+                            const commId = `${verseNum}_${cIdx}`;
                             const originalText = comm.text || comm.he || "";
                             // If data came from Firestore, ruText is already stored on the verse
                             const ruText = firestoreVerses?.get(verseNum)?.commentary?.ruText ?? null;

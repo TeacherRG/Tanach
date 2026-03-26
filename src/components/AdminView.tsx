@@ -46,6 +46,7 @@ export default function AdminView() {
   const { language } = useLanguage();
   const [adminTab, setAdminTab] = useState<"content" | "users">("content");
   const [selectedDay, setSelectedDay] = useState(1);
+  const [selectedTrack, setSelectedTrack] = useState<"neviim" | "ketuvim">("neviim");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [portions, setPortions] = useState<CuratedPortion[]>([]);
@@ -127,6 +128,8 @@ export default function AdminView() {
   const loadExisting = async () => {
     if (!dayData || !dayData.isStudyDay) return;
 
+    const trackIndex = selectedTrack === "neviim" ? 0 : 1;
+
     setLoading(true);
     setStatus(null);
     try {
@@ -134,44 +137,47 @@ export default function AdminView() {
 
       if (!snapshot.empty) {
         const data = snapshot.docs[0].data();
-        setPortions(data.portions || []);
+        const allPortions: CuratedPortion[] = data.portions || [];
+        const trackPortion = allPortions[trackIndex];
+        setPortions(trackPortion ? [trackPortion] : []);
         setStatus({ type: "success", message: "Existing content loaded!" });
       } else {
         // Not in DB — fetch Hebrew text + Steinsaltz commentary from Sefaria
-        const newPortions: CuratedPortion[] = [];
-        for (const p of dayData.portions) {
-          const sefariaData = await fetchText(p.ref);
-          newPortions.push({
-            book: p.book,
-            ruBook: p.ruBook,
-            ref: p.ref,
-            ruRef: p.ruRef,
-            heText: sefariaData.he,
-            enText: sefariaData.text,
-            enCommentary: (sefariaData.commentary || [])
-              .filter(c => {
-                const isSteinsaltz =
-                  c.author?.toLowerCase().includes("steinsaltz") ||
-                  c.heAuthor?.includes("שטיינזלץ") ||
-                  c.ref?.toLowerCase().includes("steinsaltz");
-                const hasText = (typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : "").trim();
-                const hasHe = (typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "").trim();
-                return isSteinsaltz && (hasText || hasHe);
-              })
-              .map(c => ({
-                ref: c.ref,
-                text: typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "",
-                author: c.author || c.heAuthor || "Steinsaltz"
-              })),
-            ruTranslation: [],
-            quiz: []
-          });
+        const p = dayData.portions[trackIndex];
+        if (!p) {
+          setStatus({ type: "error", message: `No ${selectedTrack === "neviim" ? "Nevi'im" : "Ketuvim"} portion found for day ${selectedDay}.` });
+          return;
         }
-        setPortions(newPortions);
-        const hasCommentary = newPortions.some(p => (p.enCommentary?.length ?? 0) > 0);
+        const sefariaData = await fetchText(p.ref);
+        const newPortion: CuratedPortion = {
+          book: p.book,
+          ruBook: p.ruBook,
+          ref: p.ref,
+          ruRef: p.ruRef,
+          heText: sefariaData.he,
+          enText: sefariaData.text,
+          enCommentary: (sefariaData.commentary || [])
+            .filter(c => {
+              const isSteinsaltz =
+                c.author?.toLowerCase().includes("steinsaltz") ||
+                c.heAuthor?.includes("שטיינזלץ") ||
+                c.ref?.toLowerCase().includes("steinsaltz");
+              const hasText = (typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : "").trim();
+              const hasHe = (typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "").trim();
+              return isSteinsaltz && (hasText || hasHe);
+            })
+            .map(c => ({
+              ref: c.ref,
+              text: typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "",
+              author: c.author || c.heAuthor || "Steinsaltz"
+            })),
+          ruTranslation: [],
+          quiz: []
+        };
+        setPortions([newPortion]);
         setStatus({
           type: "success",
-          message: hasCommentary
+          message: (newPortion.enCommentary?.length ?? 0) > 0
             ? "Loaded from Sefaria with Steinsaltz commentary. Translation and quiz not yet generated."
             : "Loaded from Sefaria. No Steinsaltz commentary found. Translation and quiz not yet generated."
         });
@@ -189,12 +195,11 @@ export default function AdminView() {
 
     setLoading(true);
     try {
-      const tracks = ["neviim", "ketuvim"] as const;
       const batch = writeBatch(db);
 
       for (let pIdx = 0; pIdx < portions.length; pIdx++) {
         const portion = portions[pIdx];
-        const track = tracks[pIdx] ?? `portion_${pIdx}`;
+        const track = selectedTrack;
         const lessonId = `${selectedDay}_${track}`;
         const { chapter, startVerse, endVerse } = parseVerseRange(portion.ref);
 
@@ -206,13 +211,30 @@ export default function AdminView() {
           ruText: string;
           author: string;
         }>();
-        (portion.enCommentary ?? []).forEach((c, cIdx) => {
+
+        // Ensure ruTranslation has exactly one entry per enCommentary item.
+        // Gemini may return fewer translations than requested, which would shift
+        // all subsequent indices and map wrong Russian text to wrong verses.
+        const enCommentaryList = portion.enCommentary ?? [];
+        const ruTranslations = [...(portion.ruTranslation ?? [])];
+        if (ruTranslations.length !== enCommentaryList.length) {
+          console.warn(
+            `[AdminView] ruTranslation length (${ruTranslations.length}) does not match ` +
+            `enCommentary length (${enCommentaryList.length}) for "${portion.ref}". ` +
+            `Padding with empty strings to prevent index shift.`
+          );
+          while (ruTranslations.length < enCommentaryList.length) {
+            ruTranslations.push("");
+          }
+        }
+
+        enCommentaryList.forEach((c, cIdx) => {
           const verseNum = parseVerseFromRef(c.ref);
           if (verseNum !== null) {
             commentaryByVerse.set(verseNum, {
               ref: c.ref,
               enText: c.text,
-              ruText: portion.ruTranslation[cIdx] ?? "",
+              ruText: ruTranslations[cIdx] ?? "",
               author: c.author ?? "Steinsaltz"
             });
           }
@@ -322,21 +344,31 @@ export default function AdminView() {
         {adminTab === "content" && (
           <div className="flex items-center gap-4">
             <div className="flex items-center bg-[#141414]/5 rounded-full p-1">
-              <button 
-                onClick={() => setSelectedDay(Math.max(1, selectedDay - 1))}
+              <button
+                onClick={() => { setSelectedDay(Math.max(1, selectedDay - 1)); setPortions([]); setStatus(null); }}
                 className="p-2 hover:bg-white rounded-full transition-all"
               >
                 <ChevronLeft size={20} />
               </button>
               <span className="px-4 font-bold">Day {selectedDay}</span>
-              <button 
-                onClick={() => setSelectedDay(selectedDay + 1)}
+              <button
+                onClick={() => { setSelectedDay(selectedDay + 1); setPortions([]); setStatus(null); }}
                 className="p-2 hover:bg-white rounded-full transition-all"
               >
                 <ChevronRight size={20} />
               </button>
             </div>
-            <button 
+
+            <select
+              value={selectedTrack}
+              onChange={(e) => { setSelectedTrack(e.target.value as "neviim" | "ketuvim"); setPortions([]); setStatus(null); }}
+              className="px-4 py-2 bg-[#141414]/5 rounded-full font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#141414]/10 cursor-pointer"
+            >
+              <option value="neviim">Nevi'im</option>
+              <option value="ketuvim">Ketuvim</option>
+            </select>
+
+            <button
               onClick={loadExisting}
               disabled={loading || !dayData?.isStudyDay}
               className="flex items-center gap-2 px-6 py-2 bg-gray-100 text-[#141414] rounded-full font-bold hover:bg-gray-200 transition-all disabled:opacity-50"
@@ -463,7 +495,7 @@ export default function AdminView() {
               <div className="flex justify-between items-center border-b border-[#141414]/5 pb-6">
                 <h2 className="text-2xl font-bold">{portion.ruBook} - {portion.ruRef}</h2>
                 <span className="text-xs uppercase tracking-widest font-bold text-[#141414]/30">
-                  {pIdx === 0 ? "Nevi'im" : "Ketuvim"}
+                  {selectedTrack === "neviim" ? "Nevi'im" : "Ketuvim"}
                 </span>
               </div>
 
