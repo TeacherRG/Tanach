@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import aiPrompt from "../config/aiPrompt.json";
 
-const MODEL = "gemini-2.5-flash-preview";
+const MODEL = "gemini-2.5-flash";
 
 function getAI(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
