@@ -121,6 +121,11 @@ export default function AdminView() {
         setStatus({ type: "success", message: "Existing content loaded!" });
       } else {
         // Not in DB — fetch Hebrew text + Steinsaltz commentary from Sefaria
+        const toStr = (val: unknown): string => {
+          if (typeof val === "string") return val;
+          if (Array.isArray(val)) return val.map(v => toStr(v)).join(" ");
+          return "";
+        };
         const newPortions: CuratedPortion[] = [];
         for (const p of dayData.portions) {
           const sefariaData = await fetchText(p.ref);
@@ -132,19 +137,25 @@ export default function AdminView() {
             heText: sefariaData.he,
             enText: sefariaData.text,
             enCommentary: (sefariaData.commentary || [])
+              .filter(c => c != null)
               .filter(c => {
+                const refStr = toStr(c.ref);
+                const authorStr = toStr(c.author);
+                const heAuthorStr = toStr(c.heAuthor);
+                const commentatorStr = toStr(c.commentator);
+                const heCommentatorStr = toStr(c.heCommentator);
                 const isSteinsaltz =
-                  c.author?.toLowerCase().includes("steinsaltz") ||
-                  c.heAuthor?.includes("שטיינזלץ") ||
-                  c.ref?.toLowerCase().includes("steinsaltz");
-                const hasText = (typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : "").trim();
-                const hasHe = (typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "").trim();
-                return isSteinsaltz && (hasText || hasHe);
+                  authorStr.toLowerCase().includes("steinsaltz") ||
+                  heAuthorStr.includes("שטיינזלץ") ||
+                  commentatorStr.toLowerCase().includes("steinsaltz") ||
+                  heCommentatorStr.includes("שטיינזלץ") ||
+                  refStr.toLowerCase().includes("steinsaltz");
+                return isSteinsaltz && (toStr(c.text).trim() || toStr(c.he).trim());
               })
               .map(c => ({
-                ref: c.ref,
-                text: typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "",
-                author: c.author || c.heAuthor || "Steinsaltz"
+                ref: toStr(c.ref),
+                text: toStr(c.text) || toStr(c.he),
+                author: toStr(c.author || c.commentator) || toStr(c.heAuthor || c.heCommentator) || "Steinsaltz"
               })),
             ruTranslation: [],
             quiz: []

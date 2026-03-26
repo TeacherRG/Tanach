@@ -17,11 +17,13 @@ export interface SefariaResponse {
   sections: number[];
   toSections: number[];
   commentary?: Array<{
-    text?: string;
-    he?: string;
-    ref: string;
-    author?: string;
-    heAuthor?: string;
+    text?: unknown;
+    he?: unknown;
+    ref?: unknown;
+    author?: unknown;
+    heAuthor?: unknown;
+    commentator?: unknown;
+    heCommentator?: unknown;
   }>;
 }
 
