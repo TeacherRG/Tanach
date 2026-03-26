@@ -13,6 +13,8 @@ interface CuratedPortion {
   ref: string;
   ruRef: string;
   heText: string[];
+  enText?: string[];
+  enCommentary?: Array<{ ref: string; text: string; author?: string }>;
   ruTranslation: string[];
   quiz: Array<{
     id: string;
@@ -128,6 +130,14 @@ export default function AdminView() {
             ref: p.ref,
             ruRef: p.ruRef,
             heText: sefariaData.he,
+            enText: sefariaData.text,
+            enCommentary: (sefariaData.commentary || [])
+              .filter(c => c.text && c.text.trim())
+              .map(c => ({
+                ref: c.ref,
+                text: c.text || "",
+                author: c.author || c.heAuthor || "Commentary"
+              })),
             ruTranslation: [],
             quiz: []
           });
@@ -347,6 +357,20 @@ export default function AdminView() {
                 </span>
               </div>
 
+              {/* Hebrew Text Section */}
+              <div className="space-y-4 mb-8">
+                <h3 className="text-sm uppercase tracking-widest font-bold text-[#141414]/40">Hebrew Original</h3>
+                <div className="space-y-2 bg-[#141414]/3 rounded-3xl p-6">
+                  {portion.heText.map((he, vIdx) => (
+                    <div key={vIdx} className="flex gap-3 items-start border-b border-[#141414]/5 pb-2 last:border-0 last:pb-0">
+                      <span className="text-[10px] font-bold text-[#141414]/30 mt-1 min-w-[2rem]">{vIdx + 1}</span>
+                      <p className="text-right flex-1 font-serif text-lg leading-relaxed" dir="rtl"
+                         dangerouslySetInnerHTML={{ __html: he }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                 {/* Translation Section */}
                 <div className="space-y-6">
@@ -356,9 +380,12 @@ export default function AdminView() {
                       <div key={vIdx} className="space-y-2">
                         <div className="flex justify-between text-[10px] font-bold text-[#141414]/20">
                           <span>Verse {vIdx + 1}</span>
-                          <span dir="rtl">{he.substring(0, 20)}...</span>
+                          {portion.enText?.[vIdx] && (
+                            <span className="text-right text-[#141414]/30 text-[9px] max-w-[60%] truncate"
+                                  dangerouslySetInnerHTML={{ __html: portion.enText[vIdx] }} />
+                          )}
                         </div>
-                        <textarea 
+                        <textarea
                           value={portion.ruTranslation[vIdx] || ""}
                           onChange={(e) => updateTranslation(pIdx, vIdx, e.target.value)}
                           className="w-full p-4 bg-[#141414]/5 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-[#141414]/10 transition-all min-h-[80px]"
@@ -367,6 +394,24 @@ export default function AdminView() {
                     ))}
                   </div>
                 </div>
+
+                {/* Right Column: Commentary + Quiz */}
+                <div className="space-y-10">
+                  {/* Steinsaltz Commentary Section */}
+                  {portion.enCommentary && portion.enCommentary.length > 0 && (
+                    <div className="space-y-6">
+                      <h3 className="text-sm uppercase tracking-widest font-bold text-[#141414]/40">Steinsaltz Commentary (English)</h3>
+                      <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                        {portion.enCommentary.map((c, cIdx) => (
+                          <div key={cIdx} className="p-4 bg-amber-50 border border-amber-100 rounded-2xl space-y-1">
+                            <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">{c.ref}</p>
+                            <p className="text-sm text-[#141414]/80 leading-relaxed"
+                               dangerouslySetInnerHTML={{ __html: c.text }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Quiz Section */}
                 <div className="space-y-6">
@@ -418,6 +463,7 @@ export default function AdminView() {
                       </div>
                     ))}
                   </div>
+                </div>
                 </div>
               </div>
             </div>
