@@ -38,8 +38,6 @@ import { Loader2, CheckCircle2, BookOpen } from "lucide-react";
 import { DateTime } from "luxon";
 import { toast } from "sonner";
 
-import { STATIC_CURATED_LESSONS } from "./data/curatedLessons";
-
 export default function App() {
   const { t, language } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
@@ -54,7 +52,6 @@ export default function App() {
   const [reminderSettings, setReminderSettings] = useState<any>(null);
   const [dailyGoal, setDailyGoal] = useState<number>(20);
   const [versesReadToday, setVersesReadToday] = useState<number>(0);
-  const [curatedLessons, setCuratedLessons] = useState<Record<number, any>>(STATIC_CURATED_LESSONS);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [earnedBadges, setEarnedBadges] = useState<{ en: string, ru: string }[]>([]);
   const [newBadge, setNewBadge] = useState<{ bookName: string, date: string } | null>(null);
@@ -79,21 +76,6 @@ export default function App() {
     });
     return () => unsubscribe();
   }, [user?.uid, isGuest]);
-
-  // Sync Curated Lessons
-  useEffect(() => {
-    if (!isAuthReady) return;
-    const unsubscribe = onSnapshot(collection(db, "curated_lessons"), (snapshot) => {
-      const lessons: Record<number, any> = { ...STATIC_CURATED_LESSONS };
-      snapshot.docs.forEach(doc => {
-        lessons[parseInt(doc.id)] = doc.data();
-      });
-      setCuratedLessons(lessons);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, "curated_lessons");
-    });
-    return () => unsubscribe();
-  }, [isAuthReady]);
 
   // Check for reminders every minute
   useEffect(() => {
@@ -426,19 +408,17 @@ export default function App() {
             exit={{ opacity: 0, x: -20 }}
           >
             {isTakingQuiz && viewingPortion ? (
-              <Quiz 
+              <Quiz
                 day={viewingPortion.day}
                 portion={viewingPortion.portion}
-                onComplete={handleCompleteQuiz} 
-                curatedQuestions={curatedLessons[viewingPortion.day]?.portions[viewingPortion.index]?.quiz}
+                onComplete={handleCompleteQuiz}
                 isAdmin={isAdmin}
               />
             ) : viewingPortion ? (
-              <LessonView 
+              <LessonView
                 day={viewingPortion.day}
                 portion={viewingPortion.portion}
-                onComplete={handleCompleteLesson} 
-                curatedData={curatedLessons[viewingPortion.day]?.portions[viewingPortion.index]}
+                onComplete={handleCompleteLesson}
                 isAdmin={isAdmin}
                 userProfile={userProfile}
               />
