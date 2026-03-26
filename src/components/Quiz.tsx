@@ -13,11 +13,10 @@ interface QuizProps {
   day: number;
   portion: Portion;
   onComplete: (score: number, totalQuestions: number) => void;
-  curatedQuestions?: Question[];
   isAdmin?: boolean;
 }
 
-export default function Quiz({ day, portion, onComplete, curatedQuestions, isAdmin }: QuizProps) {
+export default function Quiz({ day, portion, onComplete, isAdmin }: QuizProps) {
   const { t, language } = useLanguage();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,12 +30,6 @@ export default function Quiz({ day, portion, onComplete, curatedQuestions, isAdm
 
   useEffect(() => {
     async function prepareQuiz() {
-      if (curatedQuestions && curatedQuestions.length > 0) {
-        setQuestions(curatedQuestions);
-        setLoading(false);
-        return;
-      }
-
       // 1. Check if we have a static quiz for this portion
       const staticQuiz = getStaticQuiz(portion.ref, language);
       if (staticQuiz) {
@@ -54,7 +47,7 @@ export default function Quiz({ day, portion, onComplete, curatedQuestions, isAdm
 
       setLoading(true);
       try {
-        // 2. Fallback to dynamic generation if no static/curated quiz exists (only for admins)
+        // 2. Fallback to dynamic generation if no static quiz exists (only for admins)
         const data = await fetchText(portion.ref);
         const text = data.text.join(" ");
         const commentary = data.commentary?.map(c => c.text || c.he || "").join("\n") || "";
@@ -67,7 +60,7 @@ export default function Quiz({ day, portion, onComplete, curatedQuestions, isAdm
       }
     }
     prepareQuiz();
-  }, [portion, language, curatedQuestions, isAdmin]);
+  }, [portion, language, isAdmin]);
 
   const handleCheck = () => {
     if (selectedIdx === null || questions.length === 0) return;

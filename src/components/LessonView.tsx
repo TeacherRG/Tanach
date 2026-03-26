@@ -19,12 +19,11 @@ interface LessonViewProps {
   day: number;
   portion: Portion;
   onComplete: () => void;
-  curatedData?: any;
   isAdmin?: boolean;
   userProfile?: any;
 }
 
-export default function LessonView({ day, portion, onComplete, curatedData, isAdmin, userProfile }: LessonViewProps) {
+export default function LessonView({ day, portion, onComplete, isAdmin, userProfile }: LessonViewProps) {
   const { language, t } = useLanguage();
   const [data, setData] = useState<SefariaResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,10 +132,6 @@ export default function LessonView({ day, portion, onComplete, curatedData, isAd
       setLoading(true);
       try {
         const result = await fetchText(portion.ref);
-        // If admin has provided Russian translations (via database), use them
-        if (curatedData?.ruTranslation?.length > 0) {
-          result.text = curatedData.ruTranslation;
-        }
         setData(result);
       } catch (err) {
         setError("Failed to load text from Sefaria. Please try again.");
@@ -145,7 +140,7 @@ export default function LessonView({ day, portion, onComplete, curatedData, isAd
       }
     }
     load();
-  }, [portion.ref, curatedData, isAdmin]);
+  }, [portion.ref, isAdmin]);
 
   const saveToFavorites = async (type: 'verse' | 'commentary', content: string, ref: string, id: string) => {
     if (!auth.currentUser) return;
