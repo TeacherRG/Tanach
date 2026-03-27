@@ -514,13 +514,18 @@ export default function LessonView({ day, portion, onComplete, onFinish, isAdmin
                                   // Curated content: show stored Russian translation directly
                                   <div className="text-base leading-relaxed text-[#141414]/70 font-serif italic"
                                        dangerouslySetInnerHTML={{ __html: ruText }} />
-                                ) : (
-                                  // Sefaria fallback: translate on-the-fly via SharedCommentary
+                                ) : isAdmin ? (
+                                  // Admin only: translate on-the-fly via Gemini if not in DB
                                   <SharedCommentary
                                     day={day}
                                     index={commId}
                                     originalText={originalText}
+                                    isAdmin={isAdmin}
                                   />
+                                ) : (
+                                  // Regular users: show English text from Sefaria (no dynamic translation)
+                                  <div className="text-base leading-relaxed text-[#141414]/70 font-serif italic"
+                                       dangerouslySetInnerHTML={{ __html: String(originalText) }} />
                                 )}
                               </div>
                             );
