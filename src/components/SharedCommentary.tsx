@@ -8,9 +8,10 @@ interface SharedCommentaryProps {
   day: number;
   index: string; // Unique ID for the snippet within the day
   originalText: string;
+  isAdmin?: boolean;
 }
 
-export default function SharedCommentary({ day, index, originalText }: SharedCommentaryProps) {
+export default function SharedCommentary({ day, index, originalText, isAdmin }: SharedCommentaryProps) {
   const { language, t } = useLanguage();
   const [translatedText, setTranslatedText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,9 +33,11 @@ export default function SharedCommentary({ day, index, originalText }: SharedCom
           setTranslatedText(docSnap.data().translatedText);
           setLoading(false);
         } else {
-          // If no translation exists, trigger it automatically
           setLoading(false);
-          handleTranslate();
+          // Dynamic translation only for admins
+          if (isAdmin) {
+            handleTranslate();
+          }
         }
       } catch (error) {
         console.error("Error fetching translation:", error);
