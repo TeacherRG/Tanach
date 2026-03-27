@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef } from "react";
+import ReactDOM from "react-dom";
 import { DaySchedule, TANAKH_SCHEDULE } from "../data/schedule";
 import { Calendar, CheckCircle2, Flame, Trophy, ChevronRight, ChevronLeft, BookOpen, Search, Printer } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -23,6 +24,7 @@ export default function Dashboard({
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
   const [isPrintingToday, setIsPrintingToday] = useState(false);
   const [dayOffset, setDayOffset] = useState(0);
+  const loadedCountRef = useRef(0);
   const todayStr = DateTime.now().toISODate()!;
   const todayPlan = TANAKH_SCHEDULE.find(d => d.date === todayStr);
   const nextStudyDay = TANAKH_SCHEDULE.find(d => d.date >= todayStr && d.isStudyDay);
@@ -38,23 +40,33 @@ export default function Dashboard({
   const progress = (completedPortions.length / totalPortions) * 100;
   const streak = 12; // Mock streak
   
+  const totalPortionsToPrint = displayDay.portions.length;
+
+  const handlePortionLoaded = useCallback(() => {
+    loadedCountRef.current += 1;
+    if (loadedCountRef.current >= totalPortionsToPrint) {
+      // All portions have fetched — trigger print
+      window.focus();
+      setTimeout(() => {
+        try {
+          window.print();
+        } catch (err) {
+          console.error("Print error:", err);
+          toast.error(language === "ru" ? "Ошибка при печати. Попробуйте Ctrl+P" : "Print failed. Try Ctrl+P");
+        } finally {
+          setTimeout(() => {
+            setIsPrintingToday(false);
+            loadedCountRef.current = 0;
+          }, 2000);
+        }
+      }, 300);
+    }
+  }, [totalPortionsToPrint, language]);
+
   const handlePrintToday = () => {
+    loadedCountRef.current = 0;
     setIsPrintingToday(true);
-    toast.info(language === "ru" ? "Подготовка к печати..." : "Preparing for print...");
-    
-    window.focus();
-    // More delay to allow multiple portions to fetch and render
-    setTimeout(() => {
-      try {
-        window.print();
-      } catch (err) {
-        console.error("Print error:", err);
-        toast.error(language === "ru" ? "Ошибка при печати. Попробуйте использовать Ctrl+P" : "Print failed. Try using Ctrl+P");
-      } finally {
-        // Keep it rendered for a bit so the print dialog can capture it
-        setTimeout(() => setIsPrintingToday(false), 2000);
-      }
-    }, 3000); 
+    toast.info(language === "ru" ? "Загрузка данных для печати..." : "Loading print data...");
   };
 
   // Dynamic milestones
@@ -299,13 +311,24 @@ export default function Dashboard({
         )}
       </AnimatePresence>
 
-      {/* Print-only section (Daily Reading) - Hidden on screen via CSS */}
-      {isPrintingToday && (
-        <div className="print-only-root">
+      {/* Print portal — rendered directly in <body> so CSS can isolate it */}
+      {isPrintingToday && ReactDOM.createPortal(
+        <div className="print-portal">
+          <div className="print-doc-title">
+            {language === "ru"
+              ? `Учёба на День ${displayDay.day} · ${DateTime.fromISO(displayDay.date).setLocale("ru").toFormat("d MMMM yyyy")}`
+              : `Study Day ${displayDay.day} · ${DateTime.fromISO(displayDay.date).toFormat("MMMM d, yyyy")}`}
+          </div>
           {displayDay.portions.map((portion, idx) => (
-            <PrintPortion key={idx} portion={portion} language={language} />
+            <PrintPortion
+              key={`${displayDay.day}_${idx}`}
+              portion={portion}
+              language={language}
+              onLoaded={handlePortionLoaded}
+            />
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
