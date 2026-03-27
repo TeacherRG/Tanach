@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Layout from "./components/Layout";
 import Dashboard from "./components/Dashboard";
 import LessonView from "./components/LessonView";
@@ -55,11 +55,75 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [earnedBadges, setEarnedBadges] = useState<{ en: string, ru: string }[]>([]);
   const [newBadge, setNewBadge] = useState<{ bookName: string, date: string } | null>(null);
+  const [showExitDialog, setShowExitDialog] = useState(false);
+
+  // Navigation history stack for back button support
+  const navStackRef = useRef<Array<{ tab: string; vp: typeof viewingPortion; quiz: boolean }>>([]);
+  // Refs to current nav state to avoid stale closures in event handlers
+  const activeTabRef = useRef(activeTab);
+  const viewingPortionRef = useRef(viewingPortion);
+  const isTakingQuizRef = useRef(isTakingQuiz);
+  // Flag: user confirmed exit, so let the browser navigate back naturally
+  const exitConfirmedRef = useRef(false);
 
   const TOTAL_DAYS = TANAKH_SCHEDULE.length;
   const isAdmin = user?.email === "ryvgrin@gmail.com" || user?.email === "roman.grinberg.at@gmail.com" || userProfile?.role === "admin";
 
   const isGuest = user?.isAnonymous === true;
+
+  // Keep refs in sync with state (for use in event handlers)
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+  useEffect(() => { viewingPortionRef.current = viewingPortion; }, [viewingPortion]);
+  useEffect(() => { isTakingQuizRef.current = isTakingQuiz; }, [isTakingQuiz]);
+
+  // Back button (mobile): push a sentinel history entry and intercept popstate
+  useEffect(() => {
+    window.history.pushState(null, document.title);
+
+    const handlePopState = () => {
+      // If user confirmed exit, let the browser navigate back naturally
+      if (exitConfirmedRef.current) {
+        exitConfirmedRef.current = false;
+        return;
+      }
+
+      // Re-push sentinel so back button stays intercepted
+      window.history.pushState(null, document.title);
+
+      if (navStackRef.current.length > 0) {
+        const prev = navStackRef.current.pop()!;
+        setActiveTab(prev.tab);
+        setViewingPortion(prev.vp);
+        setIsTakingQuiz(prev.quiz);
+      } else {
+        setShowExitDialog(true);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Navigate forward: saves current state to the back stack
+  const pushNav = () => {
+    navStackRef.current.push({
+      tab: activeTabRef.current,
+      vp: viewingPortionRef.current,
+      quiz: isTakingQuizRef.current,
+    });
+  };
+
+  // Navigate to a tab via the nav bar (clears stack when going home)
+  const handleTabChange = (tab: string) => {
+    if (tab === "home") {
+      navStackRef.current = [];
+      setViewingPortion(null);
+      setIsTakingQuiz(false);
+    } else {
+      pushNav();
+    }
+    setActiveTab(tab);
+  };
 
   // Sync User Profile
   useEffect(() => {
@@ -299,15 +363,17 @@ export default function App() {
   };
 
   const handleStartLesson = (day: number, portion: any, index: number) => {
+    pushNav();
     setViewingPortion({ day, portion, index });
     setActiveTab("lesson");
   };
 
   const handleCompleteLesson = () => {
+    pushNav();
     setIsTakingQuiz(true);
   };
 
-  const handleCompleteQuiz = async (score: number, totalQuestions: number) => {
+  const saveProgress = async (score?: number) => {
     if (viewingPortion && user && !isGuest) {
       const portionId = `${viewingPortion.day}_${viewingPortion.portion.track}`;
       const progressId = `${user.uid}_${portionId}`;
@@ -318,12 +384,27 @@ export default function App() {
           track: viewingPortion.portion.track,
           portionId: portionId,
           completedAt: new Date(),
-          quizScore: score
+          quizScore: score ?? null
         });
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `progress/${progressId}`);
+        try { handleFirestoreError(error, OperationType.WRITE, `progress/${progressId}`); } catch {}
       }
     }
+  };
+
+  const handleFinishWithoutQuiz = async () => {
+    await saveProgress();
+    toast.info(language === "ru" ? "Чтение завершено." : "Reading completed.", {
+      description: language === "ru" ? "Ваш прогресс сохранен." : "Your progress has been saved.",
+    });
+    navStackRef.current = [];
+    setViewingPortion(null);
+    setIsTakingQuiz(false);
+    setActiveTab("home");
+  };
+
+  const handleCompleteQuiz = async (score: number, totalQuestions: number) => {
+    await saveProgress(score);
     if (totalQuestions > 0 && score / totalQuestions >= 0.7) {
       toast.success(language === "ru" ? "Отличный результат! Чтение завершено." : "Excellent score! Reading completed.", {
         description: language === "ru" ? "Ваш прогресс сохранен." : "Your progress has been saved.",
@@ -334,6 +415,7 @@ export default function App() {
         description: language === "ru" ? "Попробуйте улучшить результат в следующий раз!" : "Try to improve your score next time!",
       });
     }
+    navStackRef.current = [];
     setIsTakingQuiz(false);
     setViewingPortion(null);
     setActiveTab("home");
@@ -353,7 +435,54 @@ export default function App() {
   }
 
   return (
-    <Layout activeTab={activeTab} setActiveTab={setActiveTab} isAdmin={isAdmin}>
+    <Layout activeTab={activeTab} setActiveTab={handleTabChange} isAdmin={isAdmin}>
+      {/* Exit confirmation dialog */}
+      <AnimatePresence>
+        {showExitDialog && (
+          <motion.div
+            key="exit-dialog-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-6"
+            onClick={() => setShowExitDialog(false)}
+          >
+            <motion.div
+              key="exit-dialog"
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold mb-2">
+                {t("exitAppTitle")}
+              </h2>
+              <p className="text-[#141414]/60 mb-6">
+                {t("exitAppMessage")}
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowExitDialog(false)}
+                  className="flex-1 py-3 rounded-2xl border-2 border-[#141414]/10 font-bold text-[#141414]/70 hover:bg-[#141414]/5 transition-all"
+                >
+                  {t("stayInApp")}
+                </button>
+                <button
+                  onClick={() => {
+                    exitConfirmedRef.current = true;
+                    setShowExitDialog(false);
+                    window.history.go(-1);
+                  }}
+                  className="flex-1 py-3 rounded-2xl bg-[#141414] text-white font-bold hover:bg-[#141414]/80 transition-all"
+                >
+                  {t("exitApp")}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {newBadge && (
           <Badge 
@@ -395,9 +524,6 @@ export default function App() {
               currentDay={currentDay}
               completedPortions={completedPortions}
               onStartLesson={handleStartLesson}
-              dailyGoal={dailyGoal}
-              versesReadToday={versesReadToday}
-              onSetGoal={handleSetGoal}
               userName={user?.displayName || user?.email || ""}
             />
           </motion.div>
@@ -420,6 +546,7 @@ export default function App() {
                 day={viewingPortion.day}
                 portion={viewingPortion.portion}
                 onComplete={handleCompleteLesson}
+                onFinish={handleFinishWithoutQuiz}
                 isAdmin={isAdmin}
                 userProfile={userProfile}
               />

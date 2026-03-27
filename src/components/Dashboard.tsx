@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef } from "react";
+import ReactDOM from "react-dom";
 import { DaySchedule, TANAKH_SCHEDULE } from "../data/schedule";
-import { Calendar, CheckCircle2, Flame, Trophy, ChevronRight, BookOpen, Search, Printer } from "lucide-react";
+import { Calendar, CheckCircle2, Flame, Trophy, ChevronRight, ChevronLeft, BookOpen, Search, Printer } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { DateTime } from "luxon";
 import { useLanguage } from "../data/LanguageContext";
@@ -12,9 +13,6 @@ interface DashboardProps {
   currentDay: number;
   completedPortions: string[];
   onStartLesson: (day: number, portion: any, index: number) => void;
-  dailyGoal: number;
-  versesReadToday: number;
-  onSetGoal: (goal: number) => void;
   userName?: string;
 }
 
@@ -22,42 +20,55 @@ export default function Dashboard({
   currentDay,
   completedPortions,
   onStartLesson,
-  dailyGoal,
-  versesReadToday,
-  onSetGoal,
   userName
 }: DashboardProps) {
   const { language, t } = useLanguage();
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
-  const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [isPrintingToday, setIsPrintingToday] = useState(false);
-  const [tempGoal, setTempGoal] = useState(dailyGoal);
+  const [dayOffset, setDayOffset] = useState(0);
+  const loadedCountRef = useRef(0);
   const todayStr = DateTime.now().toISODate()!;
   const todayPlan = TANAKH_SCHEDULE.find(d => d.date === todayStr);
   const nextStudyDay = TANAKH_SCHEDULE.find(d => d.date >= todayStr && d.isStudyDay);
-  
-  const displayDay = (todayPlan && todayPlan.isStudyDay) ? todayPlan : nextStudyDay || TANAKH_SCHEDULE[0];
+  const baseDay = (todayPlan && todayPlan.isStudyDay) ? todayPlan : nextStudyDay || TANAKH_SCHEDULE[0];
+
+  const studyDays = TANAKH_SCHEDULE.filter(d => d.isStudyDay);
+  const baseDayIdx = studyDays.findIndex(d => d.day === baseDay.day);
+  const displayDayIdx = Math.max(0, Math.min(studyDays.length - 1, baseDayIdx + dayOffset));
+  const displayDay = studyDays[displayDayIdx];
+  const canGoPrev = displayDayIdx > 0;
+  const canGoNext = displayDayIdx < studyDays.length - 1;
   const totalPortions = TANAKH_SCHEDULE.filter(d => d.isStudyDay).reduce((acc, d) => acc + d.portions.length, 0);
   const progress = (completedPortions.length / totalPortions) * 100;
   const streak = 12; // Mock streak
   
+  const totalPortionsToPrint = displayDay.portions.length;
+
+  const handlePortionLoaded = useCallback(() => {
+    loadedCountRef.current += 1;
+    if (loadedCountRef.current >= totalPortionsToPrint) {
+      // All portions have fetched — trigger print
+      window.focus();
+      setTimeout(() => {
+        try {
+          window.print();
+        } catch (err) {
+          console.error("Print error:", err);
+          toast.error(language === "ru" ? "Ошибка при печати. Попробуйте Ctrl+P" : "Print failed. Try Ctrl+P");
+        } finally {
+          setTimeout(() => {
+            setIsPrintingToday(false);
+            loadedCountRef.current = 0;
+          }, 2000);
+        }
+      }, 300);
+    }
+  }, [totalPortionsToPrint, language]);
+
   const handlePrintToday = () => {
+    loadedCountRef.current = 0;
     setIsPrintingToday(true);
-    toast.info(language === "ru" ? "Подготовка к печати..." : "Preparing for print...");
-    
-    window.focus();
-    // More delay to allow multiple portions to fetch and render
-    setTimeout(() => {
-      try {
-        window.print();
-      } catch (err) {
-        console.error("Print error:", err);
-        toast.error(language === "ru" ? "Ошибка при печати. Попробуйте использовать Ctrl+P" : "Print failed. Try using Ctrl+P");
-      } finally {
-        // Keep it rendered for a bit so the print dialog can capture it
-        setTimeout(() => setIsPrintingToday(false), 2000);
-      }
-    }, 3000); 
+    toast.info(language === "ru" ? "Загрузка данных для печати..." : "Loading print data...");
   };
 
   // Dynamic milestones
@@ -139,16 +150,34 @@ export default function Dashboard({
           ) : (
             <div className="mb-10">
                   <div className="flex justify-between items-center mb-6">
-                    <div>
-                      <h2 className="text-sm uppercase tracking-[0.2em] text-white/50 mb-2 font-bold">
-                        {language === "ru" ? "Сегодняшние чтения" : "Today's Readings"}
-                      </h2>
-                      <h3 className="text-2xl font-bold mb-1">
-                        {t("day")} {displayDay.day}
-                      </h3>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setDayOffset(o => o - 1)}
+                        disabled={!canGoPrev}
+                        className="p-2 bg-white/10 text-white/60 rounded-xl hover:bg-white/20 hover:text-white transition-all disabled:opacity-20"
+                      >
+                        <ChevronLeft size={20} />
+                      </button>
+                      <div>
+                        <h2 className="text-sm uppercase tracking-[0.2em] text-white/50 mb-2 font-bold">
+                          {dayOffset === 0
+                            ? (language === "ru" ? "Сегодняшние чтения" : "Today's Readings")
+                            : (language === "ru" ? "Чтения" : "Readings")}
+                        </h2>
+                        <h3 className="text-2xl font-bold mb-1">
+                          {t("day")} {displayDay.day}
+                        </h3>
+                      </div>
+                      <button
+                        onClick={() => setDayOffset(o => o + 1)}
+                        disabled={!canGoNext}
+                        className="p-2 bg-white/10 text-white/60 rounded-xl hover:bg-white/20 hover:text-white transition-all disabled:opacity-20"
+                      >
+                        <ChevronRight size={20} />
+                      </button>
                     </div>
                     <div className="flex items-center gap-4">
-                      <button 
+                      <button
                         onClick={handlePrintToday}
                         className="p-3 bg-white/10 text-white/60 rounded-2xl hover:bg-white/20 hover:text-white transition-all flex items-center gap-2 text-xs font-bold"
                         title={language === "ru" ? "Печать всех чтений" : "Print all readings"}
@@ -274,86 +303,6 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Daily Goal Tracker */}
-        <div className="bg-white p-8 rounded-[32px] border border-[#141414]/5 shadow-sm md:col-span-2">
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-3">
-              <Flame className="text-orange-500" size={20} />
-              <h4 className="text-sm uppercase tracking-widest font-bold text-[#141414]/60">{t("dailyGoal")}</h4>
-            </div>
-            <button 
-              onClick={() => {
-                if (isEditingGoal) {
-                  onSetGoal(tempGoal);
-                }
-                setIsEditingGoal(!isEditingGoal);
-              }}
-              className="text-xs font-bold text-blue-500 hover:text-blue-600 transition-colors"
-            >
-              {isEditingGoal ? (language === "ru" ? "Сохранить" : "Save") : (language === "ru" ? "Изменить" : "Edit")}
-            </button>
-          </div>
-          
-          <div className="flex flex-col md:flex-row items-center gap-8">
-            <div className="relative w-32 h-32 flex items-center justify-center">
-              <svg className="w-full h-full -rotate-90">
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="58"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  className="text-[#141414]/5"
-                />
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="58"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  strokeDasharray={364.4}
-                  strokeDashoffset={364.4 - (Math.min(versesReadToday / dailyGoal, 1) * 364.4)}
-                  strokeLinecap="round"
-                  className="text-orange-500 transition-all duration-1000"
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold">{versesReadToday}</span>
-                <span className="text-[10px] uppercase tracking-tighter text-[#141414]/40 font-bold">/ {dailyGoal}</span>
-              </div>
-            </div>
-
-            <div className="flex-1 space-y-4 text-center md:text-left">
-              <div>
-                <h5 className="text-xl font-bold">
-                  {versesReadToday >= dailyGoal ? t("goalReached") : (language === "ru" ? "Продолжайте в том же духе!" : "Keep going!")}
-                </h5>
-                <p className="text-sm text-[#141414]/50 italic">
-                  {language === "ru" 
-                    ? `Вы прочитали ${versesReadToday} ${t("verses")} сегодня.` 
-                    : `You've read ${versesReadToday} ${t("verses")} today.`}
-                </p>
-              </div>
-
-              {isEditingGoal && (
-                <div className="flex items-center gap-4 justify-center md:justify-start">
-                  <input 
-                    type="range" 
-                    min="5" 
-                    max="100" 
-                    step="5"
-                    value={tempGoal}
-                    onChange={(e) => setTempGoal(parseInt(e.target.value))}
-                    className="w-48 accent-[#141414]"
-                  />
-                  <span className="font-bold text-sm w-12">{tempGoal} {t("verses")}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
 
       <AnimatePresence>
@@ -366,13 +315,24 @@ export default function Dashboard({
         )}
       </AnimatePresence>
 
-      {/* Print-only section (Daily Reading) - Hidden on screen via CSS */}
-      {isPrintingToday && (
-        <div className="print-only-root">
+      {/* Print portal — rendered directly in <body> so CSS can isolate it */}
+      {isPrintingToday && ReactDOM.createPortal(
+        <div className="print-portal">
+          <div className="print-doc-title">
+            {language === "ru"
+              ? `Учёба на День ${displayDay.day} · ${DateTime.fromISO(displayDay.date).setLocale("ru").toFormat("d MMMM yyyy")}`
+              : `Study Day ${displayDay.day} · ${DateTime.fromISO(displayDay.date).toFormat("MMMM d, yyyy")}`}
+          </div>
           {displayDay.portions.map((portion, idx) => (
-            <PrintPortion key={idx} portion={portion} language={language} />
+            <PrintPortion
+              key={`${displayDay.day}_${idx}`}
+              portion={portion}
+              language={language}
+              onLoaded={handlePortionLoaded}
+            />
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -10,6 +10,7 @@ export const translations = {
     showCommentary: "Show Steinsaltz Commentary",
     hideCommentary: "Hide Commentary",
     completeLesson: "Complete Reading & Take Quiz",
+    finishReading: "Finish Reading",
     language: "Language",
     translateToRussian: "Translate to Russian",
     translating: "Translating commentary...",
@@ -139,6 +140,10 @@ export const translations = {
     guestBannerDesc: "Sign in with Google to save your progress, earn badges, and access all features.",
     signInToSave: "Sign in to Save Progress",
     guestMode: "Guest Mode",
+    exitAppTitle: "Exit Application",
+    exitAppMessage: "Do you want to exit the application?",
+    exitApp: "Exit",
+    stayInApp: "Stay",
   },
   ru: {
     title: "Изучение Танаха",
@@ -151,6 +156,7 @@ export const translations = {
     showCommentary: "Показать комментарий Штейнзальца",
     hideCommentary: "Скрыть комментарий",
     completeLesson: "Завершить чтение и пройти тест",
+    finishReading: "Завершить чтение",
     language: "Язык",
     translateToRussian: "Перевести на русский",
     translating: "Перевод комментария...",
@@ -280,6 +286,10 @@ export const translations = {
     guestBannerDesc: "Войдите через Google, чтобы сохранять прогресс, получать значки и использовать все функции.",
     signInToSave: "Войти для сохранения прогресса",
     guestMode: "Режим гостя",
+    exitAppTitle: "Выход из приложения",
+    exitAppMessage: "Вы хотите выйти из приложения?",
+    exitApp: "Выйти",
+    stayInApp: "Остаться",
   }
 };
 

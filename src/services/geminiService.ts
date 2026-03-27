@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import aiPrompt from "../config/aiPrompt.json";
 
-const MODEL = "gemini-2.5-flash-preview";
+const MODEL = "gemini-2.5-flash";
 
 function getAI(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -30,18 +30,20 @@ export interface LessonResult {
   }>;
 }
 
-export async function generateLesson(heText: string[]): Promise<LessonResult> {
-  const numQuestions = Math.min(Math.max(heText.length, 3), 10);
+export async function generateLesson(enComments: string[]): Promise<LessonResult> {
+  const numQuestions = Math.min(Math.max(enComments.length, 3), 10);
   const prompt = `${aiPrompt.taskPrompt}
 
 Количество вопросов: ${numQuestions}.
 
-Текст на иврите (каждый стих на новой строке):
-${heText.join("\n")}
+Комментарии на английском (всего ${enComments.length} штук, пронумерованы):
+${enComments.map((c, i) => `[${i + 1}] ${c}`).join("\n")}
+
+ВАЖНО: верни ровно ${enComments.length} переводов в массиве "ruTranslation" — по одному для каждого пронумерованного комментария, строго в том же порядке.
 
 Верни ответ строго в JSON:
 {
-  "ruTranslation": ["перевод стиха 1", "перевод стиха 2", ...],
+  "ruTranslation": ["перевод комментария 1", "перевод комментария 2", ...],
   "quiz": [
     {
       "text": "Вопрос?",

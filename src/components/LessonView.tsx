@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import ReactDOM from "react-dom";
 import { fetchText, SefariaResponse } from "../services/sefariaService";
 import { Portion } from "../services/schedulerService";
 import { Loader2, MessageSquare, ChevronDown, ChevronUp, Pause, Volume2, BookOpen, Star, Share2, Printer, Check, ChevronLeft, ChevronRight, PartyPopper } from "lucide-react";
@@ -7,7 +8,7 @@ import { useLanguage } from "../data/LanguageContext";
 import SharedCommentary from "./SharedCommentary";
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import { db, collection, addDoc, auth, handleFirestoreError, OperationType } from "../firebase";
+import { db, collection, addDoc, auth, handleFirestoreError, OperationType, getDocs, query, orderBy } from "../firebase";
 import { toast } from "sonner";
 import { VOICES, SPEEDS } from "../constants";
 import { pcmToWav } from "../lib/audioUtils";
@@ -15,15 +16,29 @@ import confetti from "canvas-confetti";
 
 import PrintPortion from "./PrintPortion";
 
+interface FirestoreVerse {
+  verseNumber: number;
+  chapter: number;
+  heText: string;
+  enText: string;
+  commentary: {
+    ref: string;
+    enText: string;
+    ruText: string;
+    author: string;
+  } | null;
+}
+
 interface LessonViewProps {
   day: number;
   portion: Portion;
   onComplete: () => void;
+  onFinish: () => void;
   isAdmin?: boolean;
   userProfile?: any;
 }
 
-export default function LessonView({ day, portion, onComplete, isAdmin, userProfile }: LessonViewProps) {
+export default function LessonView({ day, portion, onComplete, onFinish, isAdmin, userProfile }: LessonViewProps) {
   const { language, t } = useLanguage();
   const [data, setData] = useState<SefariaResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +52,9 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
   const [currentVerseIndex, setCurrentVerseIndex] = useState(0);
 
   const [viewMode, setViewMode] = useState<"step" | "full">("step");
+  const [isPrintingLesson, setIsPrintingLesson] = useState(false);
+  // Verse data loaded from Firestore: keyed by absolute verse number
+  const [firestoreVerses, setFirestoreVerses] = useState<Map<number, FirestoreVerse> | null>(null);
 
   const textLanguage = userProfile?.textLanguage || "both";
   const voice = userProfile?.readingVoice || "Zephyr";
@@ -129,8 +147,47 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
   useEffect(() => {
     async function load() {
       setCurrentVerseIndex(0);
+      setFirestoreVerses(null);
       setLoading(true);
       try {
+        // 1. Try Firestore verses subcollection first (curated content)
+        const lessonId = `${day}_${portion.track}`;
+        const versesSnap = await getDocs(
+          query(collection(db, "lessons", lessonId, "verses"), orderBy("verseNumber"))
+        );
+
+        if (!versesSnap.empty) {
+          const map = new Map<number, FirestoreVerse>();
+          versesSnap.docs.forEach(d => {
+            const v = d.data() as FirestoreVerse;
+            map.set(v.verseNumber, v);
+          });
+          setFirestoreVerses(map);
+
+          const sorted = Array.from(map.values());
+          // Build a SefariaResponse-compatible object so all existing rendering works
+          setData({
+            he: sorted.map(v => v.heText),
+            text: sorted.map(v => v.enText),
+            ref: portion.ref,
+            book: portion.book,
+            heBook: "",
+            sections: [sorted[0]?.chapter ?? 1, sorted[0]?.verseNumber ?? 1],
+            toSections: [sorted[0]?.chapter ?? 1, sorted[sorted.length - 1]?.verseNumber ?? 1],
+            // Commentary array: one entry per verse that has Steinsaltz notes
+            commentary: sorted
+              .filter(v => v.commentary !== null)
+              .map(v => ({
+                ref: v.commentary!.ref,
+                text: v.commentary!.enText,
+                he: v.commentary!.enText,
+                author: v.commentary!.author,
+              }))
+          });
+          return;
+        }
+
+        // 2. Fallback: load live from Sefaria API
         const result = await fetchText(portion.ref);
         setData(result);
       } catch (err) {
@@ -140,7 +197,7 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
       }
     }
     load();
-  }, [portion.ref, isAdmin]);
+  }, [portion.ref, day, isAdmin]);
 
   const saveToFavorites = async (type: 'verse' | 'commentary', content: string, ref: string, id: string) => {
     if (!auth.currentUser) return;
@@ -198,23 +255,23 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
     }
   };
 
-  const handlePrint = () => {
-    toast.info(language === "ru" ? "Подготовка к печати..." : "Preparing for print...");
-    
-    // Ensure the current window is focused before printing (important for iframes)
+  const handlePrintPortionLoaded = useCallback(() => {
     window.focus();
-    
-    // Small delay to ensure layout is ready and portal content is rendered
     setTimeout(() => {
       try {
-        // Some browsers/environments might need a direct call to the iframe's print
-        // but window.print() is usually sufficient if focused.
         window.print();
       } catch (err) {
         console.error("Print error:", err);
-        toast.error(language === "ru" ? "Ошибка при печати. Попробуйте использовать Ctrl+P" : "Print failed. Try using Ctrl+P");
+        toast.error(language === "ru" ? "Ошибка при печати. Попробуйте Ctrl+P" : "Print failed. Try Ctrl+P");
+      } finally {
+        setTimeout(() => setIsPrintingLesson(false), 2000);
       }
-    }, 500);
+    }, 300);
+  }, [language]);
+
+  const handlePrint = () => {
+    toast.info(language === "ru" ? "Загрузка данных для печати..." : "Loading print data...");
+    setIsPrintingLesson(true);
   };
 
   const nextVerse = () => {
@@ -282,10 +339,13 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
 
   return (
     <>
-      {/* Print-only section (Full Lesson) - Hidden on screen via CSS */}
-      <div className="print-only-root">
-        <PrintPortion portion={portion} language={language} />
-      </div>
+      {/* Print portal — appended to <body> so CSS can isolate it */}
+      {isPrintingLesson && ReactDOM.createPortal(
+        <div className="print-portal">
+          <PrintPortion portion={portion} language={language} onLoaded={handlePrintPortionLoaded} />
+        </div>,
+        document.body
+      )}
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -368,7 +428,7 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
                                      comm.heAuthor?.includes("שטיינזלץ") ||
                                      comm.ref.toLowerCase().includes("steinsaltz"));
                 
-                return isSteinsaltz && comm.ref.includes(`${chapter}:${verseNum}`);
+                return isSteinsaltz && new RegExp(`${chapter}:${verseNum}(?:[^0-9]|$)`).test(comm.ref);
               }) || [];
 
               return (
@@ -437,13 +497,15 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
                       {verseCommentary.length > 0 ? (
                         <div className="space-y-4">
                           {verseCommentary.map((comm, cIdx) => {
-                            const commId = `${idx}_${cIdx}`;
+                            const commId = `${verseNum}_${cIdx}`;
                             const originalText = comm.text || comm.he || "";
+                            // If data came from Firestore, ruText is already stored on the verse
+                            const ruText = firestoreVerses?.get(verseNum)?.commentary?.ruText ?? null;
 
                             return (
                               <div key={commId} className="bg-[#141414]/[0.02] p-6 rounded-[24px] border border-[#141414]/5 relative overflow-hidden group/comm">
                                 <div className="absolute top-0 left-0 w-1 h-full bg-[#141414]/10" />
-                                
+
                                 <button
                                   onClick={() => saveToFavorites('commentary', originalText, `${portion.book} ${chapter}:${verseNum} (Commentary)`, `c_${commId}`)}
                                   disabled={savingFav === `c_${commId}`}
@@ -453,11 +515,23 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
                                   {savingFav === `c_${commId}` ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} />}
                                 </button>
 
-                                <SharedCommentary 
-                                  day={day}
-                                  index={commId}
-                                  originalText={originalText}
-                                />
+                                {ruText ? (
+                                  // Curated content: show stored Russian translation directly
+                                  <div className="text-base leading-relaxed text-[#141414]/70 font-serif italic"
+                                       dangerouslySetInnerHTML={{ __html: ruText }} />
+                                ) : isAdmin ? (
+                                  // Admin only: translate on-the-fly via Gemini if not in DB
+                                  <SharedCommentary
+                                    day={day}
+                                    index={commId}
+                                    originalText={originalText}
+                                    isAdmin={isAdmin}
+                                  />
+                                ) : (
+                                  // Regular users: show English text from Sefaria (no dynamic translation)
+                                  <div className="text-base leading-relaxed text-[#141414]/70 font-serif italic"
+                                       dangerouslySetInnerHTML={{ __html: String(originalText) }} />
+                                )}
                               </div>
                             );
                           })}
@@ -571,8 +645,14 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
                   <ChevronRight size={20} />
                 </button>
                 <button
-                  onClick={() => setShowConfirm(false)}
+                  onClick={() => { setShowConfirm(false); onFinish(); }}
                   className="w-full py-4 bg-[#141414]/5 text-[#141414] rounded-2xl font-bold hover:bg-[#141414]/10 transition-all"
+                >
+                  {t("finishReading")}
+                </button>
+                <button
+                  onClick={() => setShowConfirm(false)}
+                  className="w-full py-3 text-[#141414]/40 text-sm font-bold hover:text-[#141414]/60 transition-all"
                 >
                   {t("cancel")}
                 </button>

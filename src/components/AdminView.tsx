@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { TANAKH_SCHEDULE } from "../data/schedule";
-import { fetchText, SefariaResponse } from "../services/sefariaService";
+import { fetchText, SefariaResponse, fetchSteinsaltzCommentary } from "../services/sefariaService";
 import { generateLesson } from "../services/geminiService";
-import { db, doc, setDoc, handleFirestoreError, OperationType, collection, query, where, getDocs, updateDoc } from "../firebase";
+import { db, doc, setDoc, handleFirestoreError, OperationType, collection, query, where, getDocs, updateDoc, writeBatch } from "../firebase";
 import { Loader2, Save, Wand2, CheckCircle2, AlertCircle, ChevronRight, ChevronLeft, Users, BookOpen, Search, ShieldCheck } from "lucide-react";
 import { useLanguage } from "../data/LanguageContext";
 import { motion, AnimatePresence } from "motion/react";
@@ -25,10 +25,28 @@ interface CuratedPortion {
   }>;
 }
 
+// Parse chapter and verse range from a ref like "Joshua 1:1-18" or "Kings 2:5"
+function parseVerseRange(ref: string): { chapter: number; startVerse: number; endVerse: number } {
+  const match = ref.match(/(\d+):(\d+)(?:-(\d+))?/);
+  if (!match) return { chapter: 1, startVerse: 1, endVerse: 1 };
+  const chapter = parseInt(match[1]);
+  const startVerse = parseInt(match[2]);
+  const endVerse = match[3] ? parseInt(match[3]) : startVerse;
+  return { chapter, startVerse, endVerse };
+}
+
+// Extract the first verse number mentioned in a Sefaria ref
+// e.g., "Steinsaltz on Joshua 1:5" → 5, "Joshua 1:5-7" → 5
+function parseVerseFromRef(ref: string): number | null {
+  const match = ref.match(/:(\d+)/);
+  return match ? parseInt(match[1]) : null;
+}
+
 export default function AdminView() {
   const { language } = useLanguage();
   const [adminTab, setAdminTab] = useState<"content" | "users">("content");
   const [selectedDay, setSelectedDay] = useState(1);
+  const [selectedTrack, setSelectedTrack] = useState<"neviim" | "ketuvim">("neviim");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [portions, setPortions] = useState<CuratedPortion[]>([]);
@@ -94,7 +112,7 @@ export default function AdminView() {
     try {
       const newPortions: CuratedPortion[] = [...portions];
       for (let i = 0; i < newPortions.length; i++) {
-        const result = await generateLesson(newPortions[i].heText);
+        const result = await generateLesson((newPortions[i].enCommentary ?? []).map(c => c.text));
         newPortions[i] = { ...newPortions[i], ...result };
       }
       setPortions(newPortions);
@@ -110,6 +128,8 @@ export default function AdminView() {
   const loadExisting = async () => {
     if (!dayData || !dayData.isStudyDay) return;
 
+    const trackIndex = selectedTrack === "neviim" ? 0 : 1;
+
     setLoading(true);
     setStatus(null);
     try {
@@ -117,46 +137,45 @@ export default function AdminView() {
 
       if (!snapshot.empty) {
         const data = snapshot.docs[0].data();
-        setPortions(data.portions || []);
+        const allPortions: CuratedPortion[] = data.portions || [];
+        const trackPortion = allPortions[trackIndex];
+        setPortions(trackPortion ? [trackPortion] : []);
         setStatus({ type: "success", message: "Existing content loaded!" });
       } else {
         // Not in DB — fetch Hebrew text + Steinsaltz commentary from Sefaria
-        const newPortions: CuratedPortion[] = [];
-        for (const p of dayData.portions) {
-          const sefariaData = await fetchText(p.ref);
-          newPortions.push({
-            book: p.book,
-            ruBook: p.ruBook,
-            ref: p.ref,
-            ruRef: p.ruRef,
-            heText: sefariaData.he,
-            enText: sefariaData.text,
-            enCommentary: (sefariaData.commentary || [])
-              .filter(c => {
-                const isSteinsaltz =
-                  c.author?.toLowerCase().includes("steinsaltz") ||
-                  c.heAuthor?.includes("שטיינזלץ") ||
-                  c.ref?.toLowerCase().includes("steinsaltz");
-                const hasText = (typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : "").trim();
-                const hasHe = (typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "").trim();
-                return isSteinsaltz && (hasText || hasHe);
-              })
-              .map(c => ({
-                ref: c.ref,
-                text: typeof c.text === "string" ? c.text : Array.isArray(c.text) ? c.text.join(" ") : typeof c.he === "string" ? c.he : Array.isArray(c.he) ? c.he.join(" ") : "",
-                author: c.author || c.heAuthor || "Steinsaltz"
-              })),
-            ruTranslation: [],
-            quiz: []
-          });
+        const p = dayData.portions[trackIndex];
+        if (!p) {
+          setStatus({ type: "error", message: `No ${selectedTrack === "neviim" ? "Nevi'im" : "Ketuvim"} portion found for day ${selectedDay}.` });
+          return;
         }
-        setPortions(newPortions);
-        const hasCommentary = newPortions.some(p => (p.enCommentary?.length ?? 0) > 0);
+        const sefariaData = await fetchText(p.ref);
+
+        // Fetch Steinsaltz commentary directly from the dedicated Steinsaltz text.
+        // This is far more reliable than filtering commentary=1 on the base text,
+        // which often returns commentary only for the first verse of a range.
+        const steinsaltzEntries = await fetchSteinsaltzCommentary(p.bookName, p.ref);
+
+        const newPortion: CuratedPortion = {
+          book: p.book,
+          ruBook: p.ruBook,
+          ref: p.ref,
+          ruRef: p.ruRef,
+          heText: sefariaData.he,
+          enText: sefariaData.text,
+          enCommentary: steinsaltzEntries.map(s => ({
+            ref: s.ref,
+            text: s.text,
+            author: "Steinsaltz",
+          })),
+          ruTranslation: [],
+          quiz: []
+        };
+        setPortions([newPortion]);
         setStatus({
           type: "success",
-          message: hasCommentary
-            ? "Loaded from Sefaria with Steinsaltz commentary. Translation and quiz not yet generated."
-            : "Loaded from Sefaria. No Steinsaltz commentary found. Translation and quiz not yet generated."
+          message: (newPortion.enCommentary?.length ?? 0) > 0
+            ? `Loaded from Sefaria with Steinsaltz commentary (${newPortion.enCommentary!.length} verses). Translation and quiz not yet generated.`
+            : "Loaded from Sefaria. No Steinsaltz commentary found — check the book name mapping. Translation and quiz not yet generated."
         });
       }
     } catch (err) {
@@ -169,18 +188,112 @@ export default function AdminView() {
 
   const handleSave = async () => {
     if (portions.length === 0) return;
-    
+
     setLoading(true);
     try {
-      await setDoc(doc(db, "curated_lessons", selectedDay.toString()), {
-        day: selectedDay,
-        portions,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
+      const batch = writeBatch(db);
+
+      for (let pIdx = 0; pIdx < portions.length; pIdx++) {
+        const portion = portions[pIdx];
+        const track = selectedTrack;
+        const lessonId = `${selectedDay}_${track}`;
+        const { chapter, startVerse, endVerse } = parseVerseRange(portion.ref);
+
+        // Build a map: absolute verse number → commentary + Russian translation
+        // Commentary ref from Sefaria looks like "Steinsaltz on Joshua 1:5"
+        const commentaryByVerse = new Map<number, {
+          ref: string;
+          enText: string;
+          ruText: string;
+          author: string;
+        }>();
+
+        // Ensure ruTranslation has exactly one entry per enCommentary item.
+        // Gemini may return fewer translations than requested, which would shift
+        // all subsequent indices and map wrong Russian text to wrong verses.
+        const enCommentaryList = portion.enCommentary ?? [];
+        const ruTranslations = [...(portion.ruTranslation ?? [])];
+        if (ruTranslations.length !== enCommentaryList.length) {
+          console.warn(
+            `[AdminView] ruTranslation length (${ruTranslations.length}) does not match ` +
+            `enCommentary length (${enCommentaryList.length}) for "${portion.ref}". ` +
+            `Padding with empty strings to prevent index shift.`
+          );
+          while (ruTranslations.length < enCommentaryList.length) {
+            ruTranslations.push("");
+          }
+        }
+
+        enCommentaryList.forEach((c, cIdx) => {
+          const verseNum = parseVerseFromRef(c.ref);
+          if (verseNum !== null) {
+            commentaryByVerse.set(verseNum, {
+              ref: c.ref,
+              enText: c.text,
+              ruText: ruTranslations[cIdx] ?? "",
+              author: c.author ?? "Steinsaltz"
+            });
+          }
+        });
+
+        // 1. Lesson-level document: metadata only, no text arrays, no quiz
+        const lessonRef = doc(db, "lessons", lessonId);
+        batch.set(lessonRef, {
+          day: selectedDay,
+          track,
+          book: portion.book,
+          ruBook: portion.ruBook,
+          ref: portion.ref,
+          ruRef: portion.ruRef,
+          chapter,
+          startVerse,
+          endVerse,
+          verseCount: portion.heText.length,
+          updatedAt: new Date()
+        });
+
+        // 2. One document per verse in subcollection verses/
+        // Document ID = absolute verse number (e.g., "5" for verse 5)
+        for (let vIdx = 0; vIdx < portion.heText.length; vIdx++) {
+          const absVerse = startVerse + vIdx;
+          const verseRef = doc(db, "lessons", lessonId, "verses", String(absVerse));
+          const commentary = commentaryByVerse.get(absVerse) ?? null;
+
+          batch.set(verseRef, {
+            verseNumber: absVerse,
+            chapter,
+            heText: portion.heText[vIdx] ?? "",
+            enText: portion.enText?.[vIdx] ?? "",
+            // commentary is null if Steinsaltz has no note for this verse
+            commentary
+          });
+        }
+
+        // 3. Quiz questions — separate collection, each question knows its verse range
+        // Document ID: {day}_{track}_{qIdx} for deterministic overwrite on re-save
+        portion.quiz.forEach((q, qIdx) => {
+          const quizRef = doc(db, "quiz_questions", `${selectedDay}_${track}_${qIdx}`);
+          batch.set(quizRef, {
+            day: selectedDay,
+            track,
+            book: portion.book,
+            ruBook: portion.ruBook,
+            chapter,
+            verseStart: startVerse,
+            verseEnd: endVerse,
+            text: q.text,
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+            updatedAt: new Date()
+          });
+        });
+      }
+
+      await batch.commit();
       setStatus({ type: "success", message: "Lesson saved to Firestore!" });
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `curated_lessons/${selectedDay}`);
+      handleFirestoreError(err, OperationType.WRITE, `lessons/${selectedDay}`);
       setStatus({ type: "error", message: "Failed to save lesson." });
     } finally {
       setLoading(false);
@@ -227,21 +340,31 @@ export default function AdminView() {
         {adminTab === "content" && (
           <div className="flex items-center gap-4">
             <div className="flex items-center bg-[#141414]/5 rounded-full p-1">
-              <button 
-                onClick={() => setSelectedDay(Math.max(1, selectedDay - 1))}
+              <button
+                onClick={() => { setSelectedDay(Math.max(1, selectedDay - 1)); setPortions([]); setStatus(null); }}
                 className="p-2 hover:bg-white rounded-full transition-all"
               >
                 <ChevronLeft size={20} />
               </button>
               <span className="px-4 font-bold">Day {selectedDay}</span>
-              <button 
-                onClick={() => setSelectedDay(selectedDay + 1)}
+              <button
+                onClick={() => { setSelectedDay(selectedDay + 1); setPortions([]); setStatus(null); }}
                 className="p-2 hover:bg-white rounded-full transition-all"
               >
                 <ChevronRight size={20} />
               </button>
             </div>
-            <button 
+
+            <select
+              value={selectedTrack}
+              onChange={(e) => { setSelectedTrack(e.target.value as "neviim" | "ketuvim"); setPortions([]); setStatus(null); }}
+              className="px-4 py-2 bg-[#141414]/5 rounded-full font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#141414]/10 cursor-pointer"
+            >
+              <option value="neviim">Nevi'im</option>
+              <option value="ketuvim">Ketuvim</option>
+            </select>
+
+            <button
               onClick={loadExisting}
               disabled={loading || !dayData?.isStudyDay}
               className="flex items-center gap-2 px-6 py-2 bg-gray-100 text-[#141414] rounded-full font-bold hover:bg-gray-200 transition-all disabled:opacity-50"
@@ -368,7 +491,7 @@ export default function AdminView() {
               <div className="flex justify-between items-center border-b border-[#141414]/5 pb-6">
                 <h2 className="text-2xl font-bold">{portion.ruBook} - {portion.ruRef}</h2>
                 <span className="text-xs uppercase tracking-widest font-bold text-[#141414]/30">
-                  {pIdx === 0 ? "Nevi'im" : "Ketuvim"}
+                  {selectedTrack === "neviim" ? "Nevi'im" : "Ketuvim"}
                 </span>
               </div>
 
@@ -392,10 +515,10 @@ export default function AdminView() {
                   <div className="space-y-6">
                     <h3 className="text-sm uppercase tracking-widest font-bold text-[#141414]/40">Translation</h3>
                     <div className="space-y-4">
-                      {portion.heText.map((he, vIdx) => (
+                      {(portion.enCommentary ?? []).map((c, vIdx) => (
                         <div key={vIdx} className="space-y-2">
                           <div className="flex justify-between text-[10px] font-bold text-[#141414]/20">
-                            <span>Verse {vIdx + 1}</span>
+                            <span>{c.ref}</span>
                           </div>
                           <textarea
                             value={portion.ruTranslation[vIdx] || ""}
