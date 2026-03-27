@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import ReactDOM from "react-dom";
 import { fetchText, SefariaResponse } from "../services/sefariaService";
 import { Portion } from "../services/schedulerService";
 import { Loader2, MessageSquare, ChevronDown, ChevronUp, Pause, Volume2, BookOpen, Star, Share2, Printer, Check, ChevronLeft, ChevronRight, PartyPopper } from "lucide-react";
@@ -51,6 +52,7 @@ export default function LessonView({ day, portion, onComplete, onFinish, isAdmin
   const [currentVerseIndex, setCurrentVerseIndex] = useState(0);
 
   const [viewMode, setViewMode] = useState<"step" | "full">("step");
+  const [isPrintingLesson, setIsPrintingLesson] = useState(false);
   // Verse data loaded from Firestore: keyed by absolute verse number
   const [firestoreVerses, setFirestoreVerses] = useState<Map<number, FirestoreVerse> | null>(null);
 
@@ -253,23 +255,23 @@ export default function LessonView({ day, portion, onComplete, onFinish, isAdmin
     }
   };
 
-  const handlePrint = () => {
-    toast.info(language === "ru" ? "Подготовка к печати..." : "Preparing for print...");
-    
-    // Ensure the current window is focused before printing (important for iframes)
+  const handlePrintPortionLoaded = useCallback(() => {
     window.focus();
-    
-    // Small delay to ensure layout is ready and portal content is rendered
     setTimeout(() => {
       try {
-        // Some browsers/environments might need a direct call to the iframe's print
-        // but window.print() is usually sufficient if focused.
         window.print();
       } catch (err) {
         console.error("Print error:", err);
-        toast.error(language === "ru" ? "Ошибка при печати. Попробуйте использовать Ctrl+P" : "Print failed. Try using Ctrl+P");
+        toast.error(language === "ru" ? "Ошибка при печати. Попробуйте Ctrl+P" : "Print failed. Try Ctrl+P");
+      } finally {
+        setTimeout(() => setIsPrintingLesson(false), 2000);
       }
-    }, 500);
+    }, 300);
+  }, [language]);
+
+  const handlePrint = () => {
+    toast.info(language === "ru" ? "Загрузка данных для печати..." : "Loading print data...");
+    setIsPrintingLesson(true);
   };
 
   const nextVerse = () => {
@@ -337,10 +339,13 @@ export default function LessonView({ day, portion, onComplete, onFinish, isAdmin
 
   return (
     <>
-      {/* Print-only section (Full Lesson) - Hidden on screen via CSS */}
-      <div className="print-only-root">
-        <PrintPortion portion={portion} language={language} />
-      </div>
+      {/* Print portal — appended to <body> so CSS can isolate it */}
+      {isPrintingLesson && ReactDOM.createPortal(
+        <div className="print-portal">
+          <PrintPortion portion={portion} language={language} onLoaded={handlePrintPortionLoaded} />
+        </div>,
+        document.body
+      )}
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}

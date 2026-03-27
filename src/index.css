@@ -1,78 +1,146 @@
 @import "tailwindcss";
 
+/* ─── Print portal: hidden on screen, shown only when printing ─────────────── */
+.print-portal {
+  display: none;
+}
+
 @media print {
-  /* Hide the main app root contents except the print portal */
-  #root > *:not(.print-only-root) {
+  /* Hide everything in <body> except the portal we appended */
+  body > *:not(.print-portal) {
     display: none !important;
   }
-  
-  /* Ensure #root itself is visible to contain the print portal */
-  #root {
-    display: block !important;
-    height: auto !important;
-    overflow: visible !important;
-    background: white !important;
-  }
-  
-  /* Hide any other potential screen-only elements */
-  .print-hidden,
-  .no-print {
-    display: none !important;
-  }
-  
+
   html, body {
     height: auto !important;
     overflow: visible !important;
-    background-color: white !important;
-    color: black !important;
+    background-color: #fff !important;
+    color: #000 !important;
     margin: 0 !important;
     padding: 0 !important;
-  }
-
-  /* Show only the print portal */
-  .print-only-root {
-    display: block !important;
-    visibility: visible !important;
-    position: relative !important;
-    width: 100% !important;
-    height: auto !important;
-    background: white !important;
-    color: black !important;
-    margin: 0 !important;
-    padding: 2rem !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
-
-  /* Ensure Hebrew and Cyrillic fonts are handled well and elements inside print root are visible */
-  .print-only-root * {
-    visibility: visible !important;
-    display: inherit; /* Allow normal display types (block, flex, etc) to work */
-    opacity: 1 !important;
-    transform: none !important;
-    transition: none !important;
-    animation: none !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  .verse-print-block {
-    page-break-inside: avoid;
-    margin-bottom: 3rem;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 2rem;
+  /* ── Portal container ── */
+  .print-portal {
     display: block !important;
+    width: 100% !important;
+    background: #fff !important;
+    color: #000 !important;
+    padding: 1.5cm 2cm !important;
+    font-size: 11pt !important;
+    font-family: "Times New Roman", Times, serif !important;
   }
 
-  /* Ensure the header in print is visible */
-  .print-only-root header {
+  /* ── Document title row ── */
+  .print-doc-title {
     display: block !important;
-    border-bottom: 2px solid black !important;
-    margin-bottom: 2rem !important;
-    padding-bottom: 1rem !important;
+    text-align: center;
+    font-size: 14pt;
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+    padding-bottom: 0.4cm;
+    margin-bottom: 0.8cm;
+  }
+
+  /* ── Per-portion section ── */
+  .pp-section {
+    display: block !important;
+    margin-bottom: 1.5cm;
+    page-break-after: always;
+  }
+  .pp-section:last-child {
+    page-break-after: auto;
+  }
+
+  /* ── Portion header ── */
+  .pp-header {
+    display: block !important;
+    border-bottom: 1.5pt solid #000;
+    padding-bottom: 0.3cm;
+    margin-bottom: 0.5cm;
+  }
+  .pp-track {
+    display: block !important;
+    font-size: 8pt;
+    font-weight: bold;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 0.15cm;
+  }
+  .pp-title {
+    display: block !important;
+    font-size: 16pt;
+    font-weight: bold;
+    margin: 0 0 0.15cm 0;
+  }
+  .pp-he-title {
+    display: block !important;
+    font-size: 13pt;
+    direction: rtl;
+    text-align: right;
+    font-family: "David", "Times New Roman", serif !important;
+    color: #333;
+    margin: 0;
+  }
+
+  /* ── Individual verse block ── */
+  .pp-verse {
+    display: block !important;
+    margin-bottom: 0.8cm;
+    padding-bottom: 0.5cm;
+    border-bottom: 0.5pt solid #ddd;
+    page-break-inside: avoid;
+  }
+  .pp-verse:last-child {
+    border-bottom: none;
+  }
+  .pp-verse-num {
+    display: block !important;
+    font-size: 7.5pt;
+    font-weight: bold;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.2cm;
+  }
+
+  /* Hebrew text — RTL, larger, serif */
+  .pp-verse-hebrew {
+    display: block !important;
+    direction: rtl;
+    text-align: right;
+    font-family: "David", "SBL Hebrew", "Times New Roman", serif !important;
+    font-size: 15pt;
+    line-height: 1.9;
+    color: #000;
+    margin-bottom: 0.25cm;
+  }
+
+  /* Translation — LTR, slightly smaller */
+  .pp-verse-translation {
+    display: block !important;
+    direction: ltr;
+    text-align: left;
+    font-family: Arial, "DejaVu Sans", sans-serif !important;
+    font-size: 10.5pt;
+    line-height: 1.6;
+    color: #222;
+  }
+
+  /* Legacy classes kept for LessonView's own print-only-root */
+  .print-only-root {
+    display: block !important;
+  }
+  .print-hidden,
+  .no-print {
+    display: none !important;
   }
 }
 
+/* Screen: keep legacy hidden */
 .print-only-root {
   display: none;
 }
