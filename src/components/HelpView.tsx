@@ -78,7 +78,7 @@ export default function HelpView() {
         <p className="text-amber-800">
           {language === "ru" 
             ? "Если у вас возникли технические проблемы или вопросы по содержанию, пожалуйста, свяжитесь с нами по адресу support@tanakh365.com."
-            : "If you have technical issues or questions about the content, please contact us at support@tanakh365.com."}
+            : "If you have technical issues or questions about the content, please contact us at kosherletter@gmail.com."}
         </p>
       </section>
     </div>
