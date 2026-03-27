@@ -315,15 +315,12 @@ export default function Dashboard({
       {isPrintingToday && ReactDOM.createPortal(
         <div className="print-portal">
           <div className="print-doc-title">
-            {language === "ru"
-              ? `Учёба на День ${displayDay.day} · ${DateTime.fromISO(displayDay.date).setLocale("ru").toFormat("d MMMM yyyy")}`
-              : `Study Day ${displayDay.day} · ${DateTime.fromISO(displayDay.date).toFormat("MMMM d, yyyy")}`}
+            {`Study Day ${displayDay.day} · ${DateTime.fromISO(displayDay.date).toFormat("MMMM d, yyyy")}`}
           </div>
           {displayDay.portions.map((portion, idx) => (
             <PrintPortion
               key={`${displayDay.day}_${idx}`}
               portion={portion}
-              language={language}
               onLoaded={handlePortionLoaded}
             />
           ))}

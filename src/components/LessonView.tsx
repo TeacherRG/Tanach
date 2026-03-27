@@ -342,7 +342,7 @@ export default function LessonView({ day, portion, onComplete, onFinish, isAdmin
       {/* Print portal — appended to <body> so CSS can isolate it */}
       {isPrintingLesson && ReactDOM.createPortal(
         <div className="print-portal">
-          <PrintPortion portion={portion} language={language} onLoaded={handlePrintPortionLoaded} />
+          <PrintPortion portion={portion} onLoaded={handlePrintPortionLoaded} />
         </div>,
         document.body
       )}
