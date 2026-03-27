@@ -2,21 +2,56 @@ import React, { useState, useEffect } from "react";
 import { fetchText, SefariaResponse } from "../services/sefariaService";
 import { Portion } from "../services/schedulerService";
 import { getStaticTranslation } from "../services/translationService";
+import { db, collection, getDocs, query, orderBy } from "../firebase";
+
+interface FirestoreVerse {
+  verseNumber: number;
+  chapter: number;
+  heText: string;
+  enText: string;
+  commentary: {
+    ref: string;
+    enText: string;
+    ruText: string;
+    author: string;
+  } | null;
+}
 
 interface PrintPortionProps {
   portion: Portion;
   language: string;
+  day?: number;
   onLoaded?: () => void;
 }
 
-export default function PrintPortion({ portion, language, onLoaded }: PrintPortionProps) {
+export default function PrintPortion({ portion, language, day, onLoaded }: PrintPortionProps) {
   const [data, setData] = useState<SefariaResponse | null>(null);
+  const [firestoreVerses, setFirestoreVerses] = useState<Map<number, FirestoreVerse> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetchText(portion.ref);
+        const fetchSefaria = fetchText(portion.ref);
+
+        const fetchFirestore = day
+          ? (async () => {
+              const lessonId = `${day}_${portion.track}`;
+              const versesSnap = await getDocs(
+                query(collection(db, "lessons", lessonId, "verses"), orderBy("verseNumber"))
+              );
+              if (!versesSnap.empty) {
+                const map = new Map<number, FirestoreVerse>();
+                versesSnap.docs.forEach(d => {
+                  const v = d.data() as FirestoreVerse;
+                  map.set(v.verseNumber, v);
+                });
+                setFirestoreVerses(map);
+              }
+            })()
+          : Promise.resolve();
+
+        const [res] = await Promise.all([fetchSefaria, fetchFirestore]);
         setData(res);
       } catch (err) {
         console.error("Failed to fetch text for print:", err);
@@ -25,7 +60,7 @@ export default function PrintPortion({ portion, language, onLoaded }: PrintPorti
       }
     }
     load();
-  }, [portion.ref]);
+  }, [portion.ref, day, portion.track]);
 
   useEffect(() => {
     if (!loading && onLoaded) {
@@ -80,6 +115,11 @@ export default function PrintPortion({ portion, language, onLoaded }: PrintPorti
         const fallbackTranslation = data.text?.[idx] || "";
         const translationText = ruTranslation ?? fallbackTranslation;
 
+        const commentary = firestoreVerses?.get(verseNum)?.commentary ?? null;
+        const commentaryText = commentary
+          ? (language === "ru" ? commentary.ruText || commentary.enText : commentary.enText)
+          : null;
+
         return (
           <div key={idx} className="pp-verse">
             <div className="pp-verse-num">
@@ -95,6 +135,16 @@ export default function PrintPortion({ portion, language, onLoaded }: PrintPorti
             {translationText && (
               <div className="pp-verse-translation" lang={language === "ru" ? "ru" : "en"}>
                 <span dangerouslySetInnerHTML={{ __html: String(translationText) }} />
+              </div>
+            )}
+
+            {/* Commentary — in user's language */}
+            {commentaryText && (
+              <div className="pp-verse-commentary">
+                <span className="pp-verse-commentary-label">
+                  {language === "ru" ? "Комментарий:" : "Commentary:"}
+                </span>
+                <span dangerouslySetInnerHTML={{ __html: String(commentaryText) }} />
               </div>
             )}
           </div>
