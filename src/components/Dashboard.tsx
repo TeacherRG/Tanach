@@ -13,12 +13,14 @@ interface DashboardProps {
   currentDay: number;
   completedPortions: string[];
   onStartLesson: (day: number, portion: any, index: number) => void;
+  userName?: string;
 }
 
 export default function Dashboard({
   currentDay,
   completedPortions,
   onStartLesson,
+  userName
 }: DashboardProps) {
   const { language, t } = useLanguage();
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
@@ -88,7 +90,9 @@ export default function Dashboard({
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-5xl font-bold tracking-tight mb-2">
-            {language === "ru" ? "Шалом, Гость" : "Shalom, Guest"}
+            {language === "ru"
+              ? `Шалом, ${userName || "друг"}`
+              : `Shalom, ${userName || "friend"}`}
           </h1>
           <p className="text-[#141414]/50 italic text-lg">{t("subtitle")}</p>
         </div>

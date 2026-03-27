@@ -524,6 +524,7 @@ export default function App() {
               currentDay={currentDay}
               completedPortions={completedPortions}
               onStartLesson={handleStartLesson}
+              userName={user?.displayName || user?.email || ""}
             />
           </motion.div>
         ) : activeTab === "lesson" ? (
