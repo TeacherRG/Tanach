@@ -32,11 +32,12 @@ interface LessonViewProps {
   day: number;
   portion: Portion;
   onComplete: () => void;
+  onFinish: () => void;
   isAdmin?: boolean;
   userProfile?: any;
 }
 
-export default function LessonView({ day, portion, onComplete, isAdmin, userProfile }: LessonViewProps) {
+export default function LessonView({ day, portion, onComplete, onFinish, isAdmin, userProfile }: LessonViewProps) {
   const { language, t } = useLanguage();
   const [data, setData] = useState<SefariaResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -422,7 +423,7 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
                                      comm.heAuthor?.includes("שטיינזלץ") ||
                                      comm.ref.toLowerCase().includes("steinsaltz"));
                 
-                return isSteinsaltz && comm.ref.includes(`${chapter}:${verseNum}`);
+                return isSteinsaltz && new RegExp(`${chapter}:${verseNum}(?:[^0-9]|$)`).test(comm.ref);
               }) || [];
 
               return (
@@ -634,8 +635,14 @@ export default function LessonView({ day, portion, onComplete, isAdmin, userProf
                   <ChevronRight size={20} />
                 </button>
                 <button
-                  onClick={() => setShowConfirm(false)}
+                  onClick={() => { setShowConfirm(false); onFinish(); }}
                   className="w-full py-4 bg-[#141414]/5 text-[#141414] rounded-2xl font-bold hover:bg-[#141414]/10 transition-all"
+                >
+                  {t("finishReading")}
+                </button>
+                <button
+                  onClick={() => setShowConfirm(false)}
+                  className="w-full py-3 text-[#141414]/40 text-sm font-bold hover:text-[#141414]/60 transition-all"
                 >
                   {t("cancel")}
                 </button>
