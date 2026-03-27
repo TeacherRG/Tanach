@@ -328,6 +328,7 @@ export default function Dashboard({
               key={`${displayDay.day}_${idx}`}
               portion={portion}
               language={language}
+              day={displayDay.day}
               onLoaded={handlePortionLoaded}
             />
           ))}

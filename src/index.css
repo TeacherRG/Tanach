@@ -130,6 +130,26 @@
     color: #222;
   }
 
+  /* Commentary block under each verse */
+  .pp-verse-commentary {
+    display: block !important;
+    margin-top: 0.3cm;
+    padding: 0.25cm 0.4cm;
+    border-left: 2pt solid #999;
+    font-family: Arial, "DejaVu Sans", sans-serif !important;
+    font-size: 9.5pt;
+    line-height: 1.55;
+    color: #444;
+    font-style: italic;
+  }
+  .pp-verse-commentary-label {
+    display: inline !important;
+    font-weight: bold;
+    font-style: normal;
+    margin-right: 0.2em;
+    color: #333;
+  }
+
   /* Legacy classes kept for LessonView's own print-only-root */
   .print-only-root {
     display: block !important;
