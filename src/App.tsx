@@ -307,7 +307,7 @@ export default function App() {
     setIsTakingQuiz(true);
   };
 
-  const handleCompleteQuiz = async (score: number, totalQuestions: number) => {
+  const saveProgress = async (score?: number) => {
     if (viewingPortion && user && !isGuest) {
       const portionId = `${viewingPortion.day}_${viewingPortion.portion.track}`;
       const progressId = `${user.uid}_${portionId}`;
@@ -318,12 +318,25 @@ export default function App() {
           track: viewingPortion.portion.track,
           portionId: portionId,
           completedAt: new Date(),
-          quizScore: score
+          quizScore: score ?? null
         });
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `progress/${progressId}`);
+        try { handleFirestoreError(error, OperationType.WRITE, `progress/${progressId}`); } catch {}
       }
     }
+  };
+
+  const handleFinishWithoutQuiz = async () => {
+    await saveProgress();
+    toast.info(language === "ru" ? "Чтение завершено." : "Reading completed.", {
+      description: language === "ru" ? "Ваш прогресс сохранен." : "Your progress has been saved.",
+    });
+    setViewingPortion(null);
+    setActiveTab("home");
+  };
+
+  const handleCompleteQuiz = async (score: number, totalQuestions: number) => {
+    await saveProgress(score);
     if (totalQuestions > 0 && score / totalQuestions >= 0.7) {
       toast.success(language === "ru" ? "Отличный результат! Чтение завершено." : "Excellent score! Reading completed.", {
         description: language === "ru" ? "Ваш прогресс сохранен." : "Your progress has been saved.",
@@ -391,13 +404,10 @@ export default function App() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
           >
-            <Dashboard 
-              currentDay={currentDay} 
+            <Dashboard
+              currentDay={currentDay}
               completedPortions={completedPortions}
               onStartLesson={handleStartLesson}
-              dailyGoal={dailyGoal}
-              versesReadToday={versesReadToday}
-              onSetGoal={handleSetGoal}
             />
           </motion.div>
         ) : activeTab === "lesson" ? (
@@ -419,6 +429,7 @@ export default function App() {
                 day={viewingPortion.day}
                 portion={viewingPortion.portion}
                 onComplete={handleCompleteLesson}
+                onFinish={handleFinishWithoutQuiz}
                 isAdmin={isAdmin}
                 userProfile={userProfile}
               />
