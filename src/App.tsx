@@ -391,13 +391,14 @@ export default function App() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
           >
-            <Dashboard 
-              currentDay={currentDay} 
+            <Dashboard
+              currentDay={currentDay}
               completedPortions={completedPortions}
               onStartLesson={handleStartLesson}
               dailyGoal={dailyGoal}
               versesReadToday={versesReadToday}
               onSetGoal={handleSetGoal}
+              userName={user?.displayName || user?.email || ""}
             />
           </motion.div>
         ) : activeTab === "lesson" ? (
